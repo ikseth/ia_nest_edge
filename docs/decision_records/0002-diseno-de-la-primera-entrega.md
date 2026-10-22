@@ -83,6 +83,31 @@ Reconciliado con el usuario, decision a decision, sobre el plan de
   El borde no decide como piensa el ente.
 - Aparcado: `reasoning_effort` para afinar el modo razonado.
 
+## 6. Anadido el 2026-10-22: sesion archivada y consecuencias derivadas
+
+Reconciliado con el usuario al preparar el brief.
+
+- **Volver a un chat cuya sesion se archivo** (extended archiva tras 4 h sin
+  actividad y no resucita un id, `extended ADR 0015`): sesion nueva para el
+  mismo chat. El ente conserva su memoria larga, no el hilo anterior; el borde
+  NO le reenvia la historia del cliente. Limite declarado: la pantalla muestra
+  una historia que el ente ya no tiene presente.
+- **El borde no guarda estado** salvo su configuracion. El id de sesion se
+  deriva del chat (`<chat>-<n>`) y la sesion activa se localiza con
+  `session.list`; sin activa, se crea la siguiente.
+
+Consecuencias de los puntos 1 y 4, que el brief aplica:
+
+- **Los mensajes de sistema del cliente no se reenvian**, y quedan contados en
+  la auditoria. Son instrucciones del exterior sobre como pensar, igual que las
+  que el borde renuncia a mandar.
+- **Una peticion con herramientas (`tools`) se rechaza** con error explicito.
+  La primera entrega es conversacion; actuar es de la capa agentica. HA se
+  configura sin control de la casa.
+- **Los nombres de las cabeceras** (chat, persona, tarea de fondo) son
+  configuracion por consumidor, no codigo. Asi sustituir Open WebUI no edita el
+  borde.
+
 ## Impacto de version
 
 Ninguno todavia: no hay contrato publico. La piel OpenAI sera el primero.
