@@ -49,8 +49,25 @@ Se deciden con el usuario, una a una y en este orden:
      personas (`ia_nest_web`, o un agente que actue en nombre de alguien).
      Open WebUI no es proveedor de identidad: no emite identidad para otros
      consumidores, y es provisional.
-3. **Mecanismo de autenticacion** de los consumidores (meta ADR 0011 lo dejo
-   abierto).
+3. **Mecanismo de autenticacion. DECIDIDA el 2026-10-22: clave Bearer por
+   consumidor.** Es lo unico que saben mandar los tres clientes sin codigo
+   propio (criterio 1).
+   - Una clave por consumidor; en HA, una por dispositivo.
+   - La clave lleva asociada la identidad del consumidor (que es, si puede
+     afirmar personas, perfil por defecto). Configuracion fuera del repo; se
+     guarda el hash, no la clave.
+   - Rotar o revocar es editar esa configuracion. Sin panel: eso es de
+     `ia_nest_web`.
+   - Sin clave o con clave desconocida: rechazo, antes de tocar nada.
+   - Los agentes usaran el mismo mecanismo (MCP por HTTP admite Bearer).
+   - **Un unico punto de resolucion de identidades** (clave -> consumidor,
+     persona -> `user_id` y perfil). Primera fuente: fichero. LDAP u OIDC
+     serian otra fuente detras del mismo punto (los grupos LDAP darian el
+     perfil). Criterio: cambiar la fuente solo edita su adaptador; ni la
+     autenticacion, ni la traduccion a sesiones, ni el perfil.
+   - TLS aparcado. Riesgo declarado: en HTTP, quien escuche la red ve las
+     claves. Disparador: publicar el borde en una red que no sea de confianza
+     (por ejemplo, la wifi de invitados).
 4. **Perfil.** Mapa de identidad a perfil, perfil de los dispositivos
    compartidos, y como se aplica el infantil mientras conscience no exista.
 5. **Que capacidad de extended** atiende `/v1/chat/completions`, y con streaming.
