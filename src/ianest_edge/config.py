@@ -49,6 +49,7 @@ class ConsumerConfig:
     name: str
     key_sha256: str
     can_assert_people: bool
+    write_memory: bool
     headers: HeaderConfig
     default_identity: IdentityConfig
     people: dict[str, IdentityConfig]
@@ -185,6 +186,10 @@ def _consumers(raw: Any) -> list[ConsumerConfig]:
                 can_assert_people=_boolean(
                     body.get("can_assert_people", False),
                     f"{field}.can_assert_people",
+                ),
+                write_memory=_boolean(
+                    body.get("write_memory", True),
+                    f"{field}.write_memory",
                 ),
                 headers=HeaderConfig(
                     chat=_optional_text(headers_raw.get("chat"), f"{field}.headers.chat"),

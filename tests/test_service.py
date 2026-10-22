@@ -7,9 +7,12 @@ import pytest
 
 from ianest_edge.errors import DownstreamError, RequestValidationError
 from ianest_edge.client import SseEvent
+from ianest_edge.audit import AuditWriter
+from ianest_edge.config import EdgeConfig
+from ianest_edge.identity import FileIdentityResolver
 from ianest_edge.service import CompletionResult, StreamingResult
 
-from .conftest import KEY
+from .conftest import KEY, config_dict
 
 
 def _identity(service, person="adult"):
@@ -150,6 +153,50 @@ def test_background_task_disables_write_back(service, extended):
 
     run_call = next(call for call in extended.calls if call[0] == "prompt.run")
     assert run_call[1]["write_back"] is False
+
+
+@pytest.mark.parametrize(
+    ("model", "capability"),
+    [
+        ("direct", "prompt.run"),
+        ("reasoned", "reasoning.run"),
+        ("iterative", "task.run"),
+    ],
+)
+def test_consumer_without_memory_disables_write_back(
+    tmp_path, extended, model, capability
+):
+    raw = config_dict(tmp_path)
+    raw["consumers"]["chat"]["write_memory"] = False
+    config = EdgeConfig.from_dict(raw)
+    edge = __import__("ianest_edge").EdgeService(
+        config,
+        resolver=FileIdentityResolver(config),
+        client=extended,
+        audit=AuditWriter(config.audit_path),
+    )
+
+    edge.chat(_identity(edge), {}, _body(model=model), time.monotonic())
+
+    run_call = next(call for call in extended.calls if call[0] == capability)
+    assert run_call[1]["write_back"] is False
+
+
+@pytest.mark.parametrize(
+    ("model", "capability"),
+    [
+        ("direct", "prompt.run"),
+        ("reasoned", "reasoning.run"),
+        ("iterative", "task.run"),
+    ],
+)
+def test_memory_writing_consumer_omits_write_back_by_default(
+    service, extended, model, capability
+):
+    service.chat(_identity(service), {}, _body(model=model), time.monotonic())
+
+    run_call = next(call for call in extended.calls if call[0] == capability)
+    assert "write_back" not in run_call[1]
 
 
 @pytest.mark.parametrize("field", ["tools", "functions"])

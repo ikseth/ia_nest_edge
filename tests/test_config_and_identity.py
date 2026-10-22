@@ -63,6 +63,19 @@ def test_key_hash_is_sha256(config):
     ).hexdigest()
 
 
+def test_write_memory_defaults_to_true(config):
+    assert config.consumers[0].write_memory is True
+
+
+@pytest.mark.parametrize("value", ["false", 0, None])
+def test_non_boolean_write_memory_rejects_configuration(tmp_path, value):
+    raw = config_dict(tmp_path)
+    raw["consumers"]["chat"]["write_memory"] = value
+
+    with pytest.raises(ConfigurationError, match="write_memory debe ser booleano"):
+        EdgeConfig.from_dict(raw)
+
+
 def test_startup_rejects_child_non_direct_mode(tmp_path, extended):
     raw = config_dict(tmp_path)
     raw["guest"]["menu"][0]["mode"] = "razonado"

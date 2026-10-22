@@ -185,7 +185,7 @@ class EdgeService:
                     payload["auto_domain"] = True
                 else:
                     payload["domain"] = entry.domain
-            if state.background_task:
+            if state.background_task or not identity.consumer.write_memory:
                 payload["write_back"] = False
             visible_model = request["model"]
             if entry.mode == "iterativo" or not request["stream"]:

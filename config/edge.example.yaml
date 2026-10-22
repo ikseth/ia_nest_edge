@@ -74,3 +74,18 @@ consumers:
           mode: "directo"
           domain: "auto"
           default: true
+
+  linux_agent:
+    # Los informes efimeros de agentes pueden consultar memoria y RAG, pero no
+    # dejan write-back en extended.
+    key_sha256: "2222222222222222222222222222222222222222222222222222222222222222"
+    can_assert_people: false
+    write_memory: false
+    default_identity:
+      user_id: "linux_agent"
+      profile: "adult"
+      menu:
+        - id: "informe"
+          mode: "directo"
+          domain: "auto"
+          default: true
