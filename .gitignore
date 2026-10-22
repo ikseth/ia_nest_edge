@@ -1,0 +1,19 @@
+# Contexto operativo privado del repo (meta ADR 0006)
+/local/
+
+# Ajustes de herramientas de IA
+.claude/
+.codex/
+
+# Temporales y artefactos de build
+__pycache__/
+*.pyc
+*.tmp
+*.swp
+build/
+dist/
+
+# Configuracion efectiva y secretos (se versiona el .example)
+.env
+config/*.yaml
+!config/*.example.yaml

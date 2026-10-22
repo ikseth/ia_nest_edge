@@ -1,0 +1,39 @@
+# Plan de ia_nest_edge
+
+Estado: propuesta
+Version: 0.1 - 2026-10-22
+
+## Primera entrega: la piel OpenAI para la familia
+
+Objetivo: los criterios 1 a 4 del `README.md` (meta ADR 0013). El reenvio del
+contrato de extended para los agentes va en una entrega posterior, cuando
+`ia_nest_agents` lo necesite.
+
+La familia no entra hasta que extended cierre L5r y L4b; el borde se construye y
+se prueba antes, con el operador.
+
+## Decisiones antes del primer brief
+
+Un brief se escribe sobre diseno reconciliado (`meta docs/PLANTILLA_BRIEF.md`).
+Se deciden con el usuario, una a una y en este orden:
+
+1. **Conversacion -> sesion.** El dialecto OpenAI no tiene estado: el cliente
+   reenvia toda la historia en cada peticion, y extended ya guarda el hilo de
+   cada sesion. Que identifica una conversacion en cada consumidor, y que parte
+   de la historia se pasa a extended para que no llegue dos veces.
+2. **Identidad de la persona.** El borde autentica consumidores. Quien
+   identifica a la persona detras de Open WebUI (o de un dispositivo de HA):
+   el borde confia en lo que afirma el consumidor ya autenticado, o la
+   autentica el mismo.
+3. **Mecanismo de autenticacion** de los consumidores (meta ADR 0011 lo dejo
+   abierto).
+4. **Perfil.** Mapa de identidad a perfil, perfil de los dispositivos
+   compartidos, y como se aplica el infantil mientras conscience no exista.
+5. **Que capacidad de extended** atiende `/v1/chat/completions`, y con streaming.
+
+## Aparcado
+
+- Reenvio del contrato de extended (MCP y REST) para los agentes: segunda
+  entrega.
+- Valoraciones de usuario de Open WebUI como dato para extended y conscience:
+  se mira cuando haya familia usandolo.
