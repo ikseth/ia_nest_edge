@@ -79,7 +79,8 @@ Entra:
 6. **Validacion al arrancar.** El servicio NO arranca si: una entrada nombra un
    dominio que no esta en `domain.list` (consultado a extended, que lo reenvia
    al core); una identidad con perfil `child` tiene en su menu una entrada que no
-   es `directo`; extended no responde. Error claro en cada caso.
+   es `directo`; una entrada `iterativo` tiene un dominio que no es `auto`;
+   extended no responde. Error claro en cada caso.
 7. **Sesiones** (edge ADR 0002, puntos 1 y 6):
    - Con cabecera de chat: id de sesion `<consumidor>-<chat>-<n>`. Se busca con
      `session.list` (estado `activa`) la de ese prefijo; si no hay, `session.new`
@@ -98,7 +99,11 @@ Entra:
    - `razonado`: `reasoning.run` o `reasoning.stream`;
    - `iterativo`: SIEMPRE `task.run`, tambien si el cliente pidio streaming
      (ver 9).
-   Dominio fijo: `domain=<nombre>`; `auto`: `auto_domain=true`. El borde nunca
+   Dominio fijo: `domain=<nombre>`; `auto`: `auto_domain=true`. Excepcion,
+   el modo `iterativo`: `task.run` no recibe dominio (`core ADR 0043`; cada
+   subtarea se enruta por su sentido), asi que con `auto` NO se envia ni
+   `domain` ni `auto_domain`, y una entrada `iterativo` con dominio fijo es
+   configuracion invalida (ver 6). El borde nunca
    envia `enrich=false`, ni `use_memory` ni `use_rag`.
    Tarea de fondo (cabecera de tarea presente): misma peticion con
    `write_back=false`.
@@ -158,7 +163,9 @@ Los comprueba quien verifica, con los tests y leyendo el codigo:
 6. A extended llega solo el ultimo mensaje de usuario como `prompt`.
 7. `/v1/models` devuelve exactamente el menu de la identidad mas `ia_nest`, y un
    `model` fuera del menu da error.
-8. Un dominio inexistente en la configuracion, o extended caido, impide arrancar.
+8. Un dominio inexistente en la configuracion, una entrada `iterativo` con
+   dominio fijo, o extended caido, impiden arrancar; `task.run` nunca recibe
+   `domain` ni `auto_domain`.
 9. Una tarea de fondo llega con `write_back=false`.
 10. Una peticion con `tools` da error; los mensajes `system` no llegan a extended
     y constan en la auditoria.
