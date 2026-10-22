@@ -45,6 +45,12 @@ class HeaderConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TlsConfig:
+    certfile: Path
+    keyfile: Path
+
+
+@dataclass(frozen=True, slots=True)
 class ConsumerConfig:
     name: str
     key_sha256: str
@@ -61,6 +67,7 @@ class EdgeConfig:
     audit_path: Path
     host: str
     port: int
+    tls: TlsConfig | None
     consumers: tuple[ConsumerConfig, ...]
     guest: IdentityConfig
     connect_timeout_seconds: float = 30.0
@@ -117,11 +124,13 @@ class EdgeConfig:
             raise ConfigurationError(
                 "server.port debe estar entre 1 y 65535", "server.port"
             )
+        tls = _tls(server.get("tls"))
         return cls(
             extended_url=_text(extended.get("base_url"), "extended.base_url").rstrip("/"),
             audit_path=Path(_text(audit.get("path"), "audit.path")),
             host=host,
             port=port,
+            tls=tls,
             consumers=tuple(consumers),
             guest=guest,
             connect_timeout_seconds=_positive_number(
@@ -133,6 +142,29 @@ class EdgeConfig:
                 "extended.inactivity_timeout_seconds",
             ),
         )
+
+
+def _tls(raw: Any) -> TlsConfig | None:
+    if raw is None:
+        return None
+    tls = _mapping(raw, "server.tls")
+    certfile = _optional_text(tls.get("certfile"), "server.tls.certfile")
+    keyfile = _optional_text(tls.get("keyfile"), "server.tls.keyfile")
+    if (certfile is None) != (keyfile is None):
+        raise ConfigurationError(
+            "server.tls requiere certfile y keyfile juntos", "server.tls"
+        )
+    if certfile is None:
+        return None
+    certificate_path = Path(certfile)
+    key_path = Path(keyfile)
+    for path, field in (
+        (certificate_path, "server.tls.certfile"),
+        (key_path, "server.tls.keyfile"),
+    ):
+        if not path.is_file():
+            raise ConfigurationError(f"el fichero TLS no existe: {path}", field)
+    return TlsConfig(certfile=certificate_path, keyfile=key_path)
 
 
 def _consumers(raw: Any) -> list[ConsumerConfig]:

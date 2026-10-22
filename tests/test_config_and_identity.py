@@ -67,6 +67,49 @@ def test_write_memory_defaults_to_true(config):
     assert config.consumers[0].write_memory is True
 
 
+def test_tls_loads_when_certificate_and_key_exist(tmp_path):
+    raw = config_dict(tmp_path)
+    certfile = tmp_path / "edge-cert.pem"
+    keyfile = tmp_path / "edge-key.pem"
+    certfile.touch()
+    keyfile.touch()
+    raw["server"]["tls"] = {
+        "certfile": str(certfile),
+        "keyfile": str(keyfile),
+    }
+
+    config = EdgeConfig.from_dict(raw)
+
+    assert config.tls is not None
+    assert config.tls.certfile == certfile
+    assert config.tls.keyfile == keyfile
+
+
+@pytest.mark.parametrize("field", ["certfile", "keyfile"])
+def test_tls_rejects_only_one_declared(tmp_path, field):
+    raw = config_dict(tmp_path)
+    raw["server"]["tls"] = {field: str(tmp_path / f"{field}.pem")}
+
+    with pytest.raises(ConfigurationError, match="certfile y keyfile juntos"):
+        EdgeConfig.from_dict(raw)
+
+
+def test_tls_rejects_missing_file(tmp_path):
+    raw = config_dict(tmp_path)
+    certfile = tmp_path / "edge-cert.pem"
+    certfile.touch()
+    missing_keyfile = tmp_path / "missing-key.pem"
+    raw["server"]["tls"] = {
+        "certfile": str(certfile),
+        "keyfile": str(missing_keyfile),
+    }
+
+    with pytest.raises(ConfigurationError, match="fichero TLS no existe") as exc_info:
+        EdgeConfig.from_dict(raw)
+
+    assert exc_info.value.field == "server.tls.keyfile"
+
+
 @pytest.mark.parametrize("value", ["false", 0, None])
 def test_non_boolean_write_memory_rejects_configuration(tmp_path, value):
     raw = config_dict(tmp_path)

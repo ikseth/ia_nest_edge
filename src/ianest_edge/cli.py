@@ -41,8 +41,11 @@ def main() -> None:
 
     config = EdgeConfig.from_env()
     service = EdgeService(config, resolver=FileIdentityResolver(config))
-    uvicorn.run(
-        create_app(config=config, service=service),
-        host=config.host,
-        port=config.port,
-    )
+    run_options = {
+        "host": config.host,
+        "port": config.port,
+    }
+    if config.tls is not None:
+        run_options["ssl_certfile"] = str(config.tls.certfile)
+        run_options["ssl_keyfile"] = str(config.tls.keyfile)
+    uvicorn.run(create_app(config=config, service=service), **run_options)

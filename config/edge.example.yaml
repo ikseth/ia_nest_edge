@@ -5,6 +5,13 @@ server:
   # Escucha solo en la red que el operador haya protegido.
   host: "127.0.0.1"
   port: 8080
+  # TLS es opcional: certfile y keyfile se declaran juntos.
+  # El certificado debe venir de una CA propia instalada en cada cliente.
+  # Desactivar la verificacion en el cliente cifra, pero no protege contra quien
+  # se haga pasar por el borde.
+  # tls:
+  #   certfile: "/ruta/al/certificado.pem"
+  #   keyfile: "/ruta/a/la-clave-privada.pem"
 
 extended:
   base_url: "http://127.0.0.1:8001"
