@@ -2,8 +2,8 @@
 
 El borde del ente IA_NEST: la unica puerta por la que se le habla.
 
-Estado: semilla
-Version: 0.1 - 2026-10-22
+Estado: activo
+Version: 0.2 - 2026-10-22
 
 ## Que es
 
@@ -40,8 +40,45 @@ Fijado en meta ADR 0013, antes que el mecanismo:
 
 ## Estado
 
-Semilla documental, sin codigo. Lo que falta decidir antes del primer brief esta
-en `docs/PLAN.md`.
+Primera version con contrato publico: `v0.1.0` (`CHANGELOG.md`). Que cuenta
+como contrato, en `docs/VERSIONADO.md`; de que depende, en
+`docs/DEPENDENCIAS.md`. Diseno en `docs/decision_records/0002-*`.
+
+## Instalacion
+
+El instalador deja la configuracion efectiva en
+`/opt/ia_nest/config/edge/<instancia>/edge.yaml` y el estado, incluido el venv,
+en `/opt/ia_nest/state/edge/<instancia>/`. No crea claves, certificados ni el
+servicio extended.
+
+Requisitos: Bash, curl, Python >= 3.13,<3.14 y PyYAML en ese Python, porque el
+instalador valida `edge.yaml` antes de crear el venv. Instalar PyYAML con
+`zypper install python313-PyYAML` en openSUSE o `apt install python3-yaml` en
+Debian.
+
+En una maquina limpia, primero crear un entorno temporal para generar cada
+clave de consumidor y conservar solo su hash en `edge.yaml`:
+
+```bash
+python3 -m venv /tmp/ianest-edge-key
+/tmp/ianest-edge-key/bin/pip install .
+/tmp/ianest-edge-key/bin/ianest-edge key
+```
+
+Copiar `config/edge.example.yaml` fuera del repositorio, completar los hashes y
+ajustar `audit.path` dentro del estado de la instancia, por ejemplo
+`/opt/ia_nest/state/edge/family/audit/edge.jsonl`. Preparar tambien
+`deploy/ejemplo.setup.conf` fuera del repositorio con la ruta de ese `edge.yaml`
+y lanzar:
+
+```bash
+deploy/setup.sh --config /ruta/privada/edge.setup.conf
+```
+
+Los overrides de linea de comandos tienen precedencia sobre el fichero, que la
+tiene sobre los valores por defecto. `--print-config` muestra la configuracion
+efectiva sin instalar; una configuracion ya desplegada se conserva salvo
+`REPLACE_CONFIG=true`.
 
 ## Orden de lectura
 
