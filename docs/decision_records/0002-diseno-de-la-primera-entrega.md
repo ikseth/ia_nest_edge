@@ -108,6 +108,17 @@ Consecuencias de los puntos 1 y 4, que el brief aplica:
   configuracion por consumidor, no codigo. Asi sustituir Open WebUI no edita el
   borde.
 
+## 7. Anadido el 2026-10-22: consumidores que no escriben memoria
+
+Reconciliado con el usuario al disenar el agente Linux (`ia_nest_agents`,
+`docs/PLAN.md`, decision 3: informes efimeros).
+
+- Opcion por consumidor en la configuracion: no escribe memoria. Todas sus
+  peticiones llevan `write_back=false`. Por defecto, si escribe.
+- No se usa la cabecera de tarea de fondo para esto: falsearia lo que significa.
+- No toca el enriquecimiento: el consumidor sigue recibiendo memoria y RAG,
+  solo no deja huella.
+
 ## Impacto de version
 
 Ninguno todavia: no hay contrato publico. La piel OpenAI sera el primero.
