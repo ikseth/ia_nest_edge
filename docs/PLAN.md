@@ -68,8 +68,25 @@ Se deciden con el usuario, una a una y en este orden:
    - TLS aparcado. Riesgo declarado: en HTTP, quien escuche la red ve las
      claves. Disparador: publicar el borde en una red que no sea de confianza
      (por ejemplo, la wifi de invitados).
-4. **Perfil.** Mapa de identidad a perfil, perfil de los dispositivos
-   compartidos, y como se aplica el infantil mientras conscience no exista.
+4. **Perfil. DECIDIDA el 2026-10-22: el borde afirma un hecho, el ente decide.**
+   - El borde no manda instrucciones: afirma que clase de interlocutor es, como
+     un campo mas de la identidad (`edge CR-0001`, al core). Decirle al ente
+     como comportarse seria dirigir su pensar (`core ADR 0033`).
+   - Mientras conscience no exista, extended lo compone como contexto del
+     interlocutor, siempre y sin memorizarlo (`edge CR-0002`). El juicio sigue
+     destinado a conscience, sin cambiar la costura.
+   - Mapa identidad -> perfil en la configuracion del borde (decision 3);
+     dispositivo compartido o perfil desconocido: infantil.
+   - Para identidades infantiles el borde usa solo `prompt.*` y nunca desactiva
+     el enriquecimiento.
+   - Criterio duro, comprobable en dos puntos: la auditoria del borde (ninguna
+     identidad infantil sale sin el atributo) y la telemetria de extended
+     (ninguna peticion con el atributo sin el contexto compuesto).
+   - La familia no entra hasta que los dos CR esten desplegados: hoy un campo
+     de identidad desconocido se descarta en silencio en el core y en
+     extended. Antes, prueba de laboratorio de que el modelo atiende el
+     contexto. Alternativa si los CR se atascan: variante de modelo con
+     `SYSTEM` propio, comprobada antes en el laboratorio.
 5. **Que capacidad de extended** atiende `/v1/chat/completions`, y con streaming.
 
 ## Aparcado
