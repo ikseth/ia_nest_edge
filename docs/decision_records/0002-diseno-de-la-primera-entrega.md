@@ -108,6 +108,29 @@ Consecuencias de los puntos 1 y 4, que el brief aplica:
   configuracion por consumidor, no codigo. Asi sustituir Open WebUI no edita el
   borde.
 
+## 7. Anadido el 2026-10-22: consumidores que no escriben memoria
+
+Reconciliado con el usuario al disenar el agente Linux (`ia_nest_agents`,
+`docs/PLAN.md`, decision 3: informes efimeros).
+
+- Opcion por consumidor en la configuracion: no escribe memoria. Todas sus
+  peticiones llevan `write_back=false`. Por defecto, si escribe.
+- No se usa la cabecera de tarea de fondo para esto: falsearia lo que significa.
+- No toca el enriquecimiento: el consumidor sigue recibiendo memoria y RAG,
+  solo no deja huella.
+
+## 8. Anadido el 2026-10-22: TLS disponible en el codigo
+
+Reconciliado con el usuario antes de abrir el PR de la primera entrega. Matiza
+el punto 3: TLS deja de estar aparcado en el codigo.
+
+- El borde puede servir HTTPS con un certificado y su clave declarados en la
+  configuracion. Sin ellos, HTTP como hasta ahora.
+- Si se activa o no es decision de despliegue, en la visita de laboratorio.
+- Certificado recomendado: emitido por una CA propia, que se instala una vez en
+  cada cliente. Desactivar la verificacion en los clientes no vale: cifra, pero
+  no impide hacerse pasar por el borde.
+
 ## Impacto de version
 
 Ninguno todavia: no hay contrato publico. La piel OpenAI sera el primero.

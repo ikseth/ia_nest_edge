@@ -12,6 +12,9 @@ __pycache__/
 *.swp
 build/
 dist/
+*.egg-info/
+.pytest_cache/
+.coverage
 
 # Configuracion efectiva y secretos (se versiona el .example)
 .env

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ianest-edge"
+version = "0.1.0"
+description = "Borde autenticador y piel OpenAI de IA_NEST"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "PyYAML>=6,<7",
+    "starlette>=1.0,<2",
+    "uvicorn>=0.31,<1",
+]
+
+[project.scripts]
+ianest-edge = "ianest_edge.cli:main"
+ianest-edge-key = "ianest_edge.cli:key_main"
+
+[project.optional-dependencies]
+test = [
+    "httpx>=0.28,<1",
+    "pytest>=9,<10",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
