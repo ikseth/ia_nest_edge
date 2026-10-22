@@ -17,10 +17,23 @@ se prueba antes, con el operador.
 Un brief se escribe sobre diseno reconciliado (`meta docs/PLANTILLA_BRIEF.md`).
 Se deciden con el usuario, una a una y en este orden:
 
-1. **Conversacion -> sesion.** El dialecto OpenAI no tiene estado: el cliente
-   reenvia toda la historia en cada peticion, y extended ya guarda el hilo de
-   cada sesion. Que identifica una conversacion en cada consumidor, y que parte
-   de la historia se pasa a extended para que no llegue dos veces.
+1. **Conversacion -> sesion. DECIDIDA el 2026-10-22.** El dialecto OpenAI no
+   tiene estado: el cliente reenvia toda la historia en cada peticion, y
+   extended ya guarda el hilo de cada sesion.
+   - **Extended lleva el hilo.** El borde le pasa solo el turno nuevo del
+     usuario y la sesion; la historia del cliente sirve para localizar la
+     sesion, no se reenvia.
+   - **Localizar la sesion.** Si el consumidor manda identificador de chat
+     (Open WebUI: cabecera `X-OpenWebUI-Chat-Id`), un chat es una sesion. Si
+     no, la historia decide: un solo turno de usuario abre sesion nueva
+     (`session.new`); mas de uno sigue la ultima sesion activa de esa
+     identidad.
+   - Las tareas de fondo del consumidor (Open WebUI: `X-OpenWebUI-Task`) no
+     entran como turnos.
+   - Limites declarados: una misma identidad sin identificador de chat con dos
+     conversaciones a la vez mezcla sesiones (una credencial por dispositivo lo
+     evita); editar o regenerar en Open WebUI no reescribe el hilo de extended
+     (aparcado).
 2. **Identidad de la persona.** El borde autentica consumidores. Quien
    identifica a la persona detras de Open WebUI (o de un dispositivo de HA):
    el borde confia en lo que afirma el consumidor ya autenticado, o la
