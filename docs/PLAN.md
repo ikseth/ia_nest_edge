@@ -34,10 +34,21 @@ Se deciden con el usuario, una a una y en este orden:
      conversaciones a la vez mezcla sesiones (una credencial por dispositivo lo
      evita); editar o regenerar en Open WebUI no reescribe el hilo de extended
      (aparcado).
-2. **Identidad de la persona.** El borde autentica consumidores. Quien
-   identifica a la persona detras de Open WebUI (o de un dispositivo de HA):
-   el borde confia en lo que afirma el consumidor ya autenticado, o la
-   autentica el mismo.
+2. **Identidad de la persona. DECIDIDA el 2026-10-22: confianza encadenada.**
+   El borde autentica al consumidor y acepta la persona que este afirma, con
+   tres condiciones:
+   - Solo afirman personas los consumidores declarados para ello (hoy, Open
+     WebUI). En los demas, la identidad es el propio consumidor o dispositivo.
+   - Solo vale una persona declarada en el borde (configuracion fuera del
+     repo: persona del consumidor -> `user_id` y perfil).
+   - Persona no declarada: perfil infantil y `user_id` de invitado.
+   - Riesgo declarado: quien administra el consumidor puede afirmar a
+     cualquier persona de la lista.
+   - Camino declarado: un proveedor de identidad (OIDC) comun en el que confien
+     el consumidor y el borde. Disparador: el segundo consumidor que lleve
+     personas (`ia_nest_web`, o un agente que actue en nombre de alguien).
+     Open WebUI no es proveedor de identidad: no emite identidad para otros
+     consumidores, y es provisional.
 3. **Mecanismo de autenticacion** de los consumidores (meta ADR 0011 lo dejo
    abierto).
 4. **Perfil.** Mapa de identidad a perfil, perfil de los dispositivos
