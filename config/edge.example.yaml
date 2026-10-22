@@ -1,0 +1,76 @@
+# Configuracion de ejemplo de ia_nest_edge.
+# Copiar a config/edge.yaml y no versionar el fichero efectivo.
+
+server:
+  # Escucha solo en la red que el operador haya protegido.
+  host: "127.0.0.1"
+  port: 8080
+
+extended:
+  base_url: "http://127.0.0.1:8001"
+  connect_timeout_seconds: 30
+  inactivity_timeout_seconds: 600
+
+audit:
+  # Es salida de ejecucion: debe quedar fuera del repo.
+  path: "local/audit/edge.jsonl"
+
+# Identidad cerrada para una persona ausente o no declarada.
+guest:
+  user_id: "guest"
+  menu:
+    - id: "conversacion"
+      mode: "directo"
+      domain: "auto"
+      default: true
+
+consumers:
+  family_chat:
+    # Sustituir por la salida `sha256` de `ianest-edge key`.
+    key_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    can_assert_people: true
+    headers:
+      chat: "X-Chat-Id"
+      person: "X-Person-Id"
+      background_task: "X-Background-Task"
+    default_identity:
+      user_id: "shared_device"
+      # Un perfil ausente o desconocido se convierte en child.
+      profile: "child"
+      menu:
+        - id: "conversacion"
+          mode: "directo"
+          domain: "auto"
+          default: true
+    people:
+      operator:
+        user_id: "operator"
+        profile: "adult"
+        menu:
+          - id: "directo"
+            mode: "directo"
+            domain: "auto"
+            default: true
+          - id: "razonado"
+            mode: "razonado"
+            domain: "auto"
+            default: false
+          - id: "iterativo_prototipo"
+            mode: "iterativo"
+            domain: "auto"
+            default: false
+
+  home_assistant_device:
+    # Cada dispositivo usa una clave distinta.
+    key_sha256: "1111111111111111111111111111111111111111111111111111111111111111"
+    can_assert_people: false
+    headers:
+      chat: "X-Conversation-Id"
+    default_identity:
+      user_id: "home_assistant_device"
+      profile: "adult"
+      menu:
+        - id: "casa"
+          mode: "directo"
+          domain: "auto"
+          default: true
