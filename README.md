@@ -2,8 +2,8 @@
 
 El borde del ente IA_NEST: la unica puerta por la que se le habla.
 
-Estado: semilla
-Version: 0.1 - 2026-10-22
+Estado: activo
+Version: 0.2 - 2026-10-22
 
 ## Que es
 
@@ -40,8 +40,9 @@ Fijado en meta ADR 0013, antes que el mecanismo:
 
 ## Estado
 
-Semilla documental, sin codigo. Lo que falta decidir antes del primer brief esta
-en `docs/PLAN.md`.
+Primera version con contrato publico: `v0.1.0` (`CHANGELOG.md`). Que cuenta
+como contrato, en `docs/VERSIONADO.md`; de que depende, en
+`docs/DEPENDENCIAS.md`. Diseno en `docs/decision_records/0002-*`.
 
 ## Instalacion
 

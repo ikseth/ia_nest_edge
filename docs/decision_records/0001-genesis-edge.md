@@ -25,3 +25,8 @@ mecanismo hasta que existiera ese consumidor.
 ## Impacto de version
 
 Ninguno: no hay contrato publico.
+
+## Estado posterior
+
+2026-10-22: existe contrato publico (la piel OpenAI de edge ADR 0002). Que
+cuenta como contrato, en `docs/VERSIONADO.md`; primera version, `v0.1.0`.
