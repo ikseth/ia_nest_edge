@@ -143,28 +143,72 @@ def test_iterative_never_receives_domain_and_streams_one_chunk(
     assert chunks[1] == b"data: [DONE]\n\n"
 
 
-def test_background_task_disables_write_back(service, extended):
-    service.chat(
+@pytest.mark.parametrize(
+    ("headers", "background_task"),
+    [
+        ({"x-tAsK": "title_generation"}, True),
+        ({"X-Task": ""}, False),
+        ({"X-Task": "   "}, False),
+        ({}, False),
+    ],
+)
+@pytest.mark.parametrize(
+    ("model", "capability"),
+    [
+        ("direct", "prompt"),
+        ("reasoned", "reasoning"),
+        ("iterative", "task"),
+    ],
+)
+@pytest.mark.parametrize("stream", [False, True])
+def test_background_task_header_controls_write_back_and_audit(
+    service,
+    extended,
+    config,
+    headers,
+    background_task,
+    model,
+    capability,
+    stream,
+):
+    result = service.chat(
         _identity(service),
-        {"X-Task": "anything"},
-        _body(),
+        headers,
+        _body(model=model, stream=stream),
         time.monotonic(),
     )
+    if stream:
+        assert isinstance(result, StreamingResult)
+        list(result.body)
+    else:
+        assert isinstance(result, CompletionResult)
 
-    run_call = next(call for call in extended.calls if call[0] == "prompt.run")
-    assert run_call[1]["write_back"] is False
+    expected_capability = (
+        "task.run"
+        if capability == "task"
+        else f"{capability}.{'stream' if stream else 'run'}"
+    )
+    run_call = next(
+        call for call in extended.calls if call[0] == expected_capability
+    )
+    if background_task:
+        assert run_call[1]["write_back"] is False
+    else:
+        assert "write_back" not in run_call[1]
+    assert _audit(config)[-1]["background_task"] is background_task
 
 
 @pytest.mark.parametrize(
     ("model", "capability"),
     [
-        ("direct", "prompt.run"),
-        ("reasoned", "reasoning.run"),
-        ("iterative", "task.run"),
+        ("direct", "prompt"),
+        ("reasoned", "reasoning"),
+        ("iterative", "task"),
     ],
 )
+@pytest.mark.parametrize("stream", [False, True])
 def test_consumer_without_memory_disables_write_back(
-    tmp_path, extended, model, capability
+    tmp_path, extended, model, capability, stream
 ):
     raw = config_dict(tmp_path)
     raw["consumers"]["chat"]["write_memory"] = False
@@ -176,9 +220,23 @@ def test_consumer_without_memory_disables_write_back(
         audit=AuditWriter(config.audit_path),
     )
 
-    edge.chat(_identity(edge), {}, _body(model=model), time.monotonic())
+    result = edge.chat(
+        _identity(edge), {}, _body(model=model, stream=stream), time.monotonic()
+    )
+    if stream:
+        assert isinstance(result, StreamingResult)
+        list(result.body)
+    else:
+        assert isinstance(result, CompletionResult)
 
-    run_call = next(call for call in extended.calls if call[0] == capability)
+    expected_capability = (
+        "task.run"
+        if capability == "task"
+        else f"{capability}.{'stream' if stream else 'run'}"
+    )
+    run_call = next(
+        call for call in extended.calls if call[0] == expected_capability
+    )
     assert run_call[1]["write_back"] is False
 
 
