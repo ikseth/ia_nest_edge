@@ -658,7 +658,5 @@ def _header_value(headers: Mapping[str, str], name: str | None) -> str | None:
 
 
 def _header_present(headers: Mapping[str, str], name: str | None) -> bool:
-    if name is None:
-        return False
-    target = name.lower()
-    return any(key.lower() == target for key in headers)
+    value = _header_value(headers, name)
+    return value is not None and bool(value.strip())

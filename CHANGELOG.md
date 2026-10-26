@@ -5,6 +5,13 @@ Sin acentos por convencion.
 
 ## [No publicado]
 
+## [0.1.1] - 2026-10-26
+
+### Corregido
+- Una cabecera de tarea de fondo vacia o solo con espacios vuelve a contar como
+  turno normal; solo un valor no vacio desactiva `write_back` (edge ficha
+  v0.1/0001).
+
 ## [0.1.0] - 2026-10-22
 
 Primera version con contrato publico (`docs/VERSIONADO.md`).
