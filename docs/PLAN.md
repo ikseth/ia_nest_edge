@@ -1,38 +1,37 @@
 # Plan de ia_nest_edge
 
 Estado: propuesta
-Version: 0.2 - 2026-10-22 (diseno de la primera entrega cerrado, edge ADR 0002)
+Version: 0.3 - 2026-10-27 (primera entrega hecha; orden entre capas en meta, H01)
 
-## Primera entrega: la piel OpenAI para la familia
+El orden de este repo respecto a otras capas no se fija aqui: vive en la hoja
+de ruta del ente (`ia_nest_meta/docs/plan/HOJA_DE_RUTA.md`, meta ADR 0014).
+Este plan lleva solo el detalle interno del borde.
 
-Objetivo: los criterios 1 a 4 del `README.md` (meta ADR 0013). El reenvio del
-contrato de extended para los agentes va en una entrega posterior, cuando
-`ia_nest_agents` lo necesite.
+## Primera entrega: la piel OpenAI (hecha)
 
-Diseno reconciliado: `docs/decision_records/0002-diseno-de-la-primera-entrega.md`
-(sesiones, identidad de la persona, autenticacion, perfil y menu por
-consumidor). No se repite aqui.
+Objetivo: los criterios 1 a 4 del `README.md` (meta ADR 0013). Diseno
+reconciliado en `docs/decision_records/0002-diseno-de-la-primera-entrega.md`.
 
-Siguiente paso: el brief para el codificador (`meta docs/PLANTILLA_BRIEF.md`).
+Publicada en `v0.1.0` y corregida en `v0.1.1` (ficha v0.1/0001). Verificada en
+la visita de laboratorio del 2026-10-26/27: criterios 2, 3 y 4 pasan; el 1,
+parcial (Open WebUI si; Kodi y HA, fuera). Evidencia en el laboratorio del
+operador, fuera de este repo.
 
-## Lo que espera fuera de este repo
+## Lo que sigue, por hito de meta
 
-| que | donde | bloquea |
-|---|---|---|
-| `edge CR-0001`: perfil del interlocutor en la identidad | core | la entrada de la familia |
-| `edge CR-0002`: extended lo transporta y lo compone | extended | la entrada de la familia |
-| `edge CR-0003`: modo iterativo de uso normal | extended (y el core, por su CR) | que el iterativo deje de ser prototipo |
-| L5r y L4b de la puerta de extended | extended | la entrada de la familia |
+| Que | Hito |
+|---|---|
+| Fuente de identidades en el directorio (edge ADR 0002, punto 2) | H05 |
+| Reenvio del contrato de extended (REST y MCP): el punto comun para servicios y agentes | H05 |
+| TLS en los tramos que cruzan el perimetro (edge ADR 0002, punto 8) | H06 |
+| Diseno por consumidor: Kodi (su `system`, sin memoria), HA (estado de la casa), `write_back=false` por consumidor para el agente | H07 |
 
-Ninguno bloquea la primera entrega: se construye y se prueba con el operador.
+Lo que el borde espera de otras capas (`edge CR-0001`, `CR-0002`, `CR-0003`,
+L5r y L4b de extended) figura en la hoja de ruta como trabajo de capa vigilado.
 
 ## Aparcado
 
-- Reenvio del contrato de extended (MCP y REST) para los agentes: segunda
-  entrega.
 - Editar o regenerar en Open WebUI reescribiendo el hilo de extended.
-- TLS (disparador en edge ADR 0002, punto 3).
-- Proveedor de identidad comun (disparador en edge ADR 0002, punto 2).
 - `reasoning_effort` para el modo razonado.
 - Valoraciones de usuario de Open WebUI como dato para extended y conscience:
   se mira cuando haya familia usandolo.
