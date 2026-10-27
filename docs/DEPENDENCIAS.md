@@ -13,9 +13,21 @@ dependencias; el registro de capas del ente es un indice que lo refleja.
 
   **Verificacion.** Comprobado contra el CODIGO de `v0.5.2` al revisar la
   primera entrega (rutas, campos de peticion y respuesta, eventos de flujo,
-  error `SessionAlreadyExistsError`). Pendiente: verificacion EN VIVO en la
-  visita de laboratorio, contra la version desplegada. Hasta entonces el rango
-  queda declarado, no verificado.
+  error `SessionAlreadyExistsError`).
+
+  **Verificado EN VIVO** el 2026-10-26/27 en la visita de laboratorio: borde
+  `v0.1.1` contra extended `v0.5.2` (core `v0.4.0` detras), los dos instalados
+  desde su tag. Con Open WebUI como cliente real y sondas directas al borde:
+  - `session.list` y `session.new` con identidad obligatoria: un chat es una
+    sesion estable entre turnos y dos chats son dos sesiones;
+  - `prompt.run` y `prompt.stream` (directo), `reasoning.run` y
+    `reasoning.stream` (razonado) y `task.run` (iterativo), con `domain` fijo
+    y automatico;
+  - `write_back=false` en tareas de fondo: no dejan turno en la sesion;
+  - `domain.list` reenviado al core: los dominios fijos del menu existen.
+
+  Rango verificado: `v0.5.2`. El resto de `>=0.5 <0.6` sigue declarado, no
+  medido.
 
 - `ia_nest_core`, solo a traves de extended (garantia de transparencia de
   extended). El borde no llama al core directamente.
