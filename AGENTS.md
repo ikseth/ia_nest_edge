@@ -12,6 +12,10 @@ registro) viven en `ia_nest_meta` y no se repiten aqui. Lee antes:
    y sesiones que este repo tiene que producir)
 6. `README.md` y `docs/PLAN.md` de este repo
 
+Orden entre capas: la hoja de ruta del ente, en `meta docs/plan/HOJA_DE_RUTA.md`
+(meta ADR 0014). Los hilos de un hito salen de meta; el plan de este repo lleva
+solo su detalle interno.
+
 ## Reglas propias de este repo
 
 - **El borde no piensa.** No infiere, no recuerda, no delibera ni presenta
