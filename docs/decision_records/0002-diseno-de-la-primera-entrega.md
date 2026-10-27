@@ -134,3 +134,14 @@ el punto 3: TLS deja de estar aparcado en el codigo.
 ## Impacto de version
 
 Ninguno todavia: no hay contrato publico. La piel OpenAI sera el primero.
+
+## Estado posterior
+
+2026-10-27: el "camino declarado" del punto 2 (proveedor de identidad con
+disparador) y el TLS aparcado del punto 3 dejan de esperar a un disparador.
+Pasan al criterio de salida de la apertura del ente: identidades en un
+directorio central (personas, servicios y agentes; la configuracion del borde
+sin ninguna), punto REST/MCP comun, TLS en el perimetro y fallo cerrado si el
+directorio no responde. Lo construido sigue valiendo: el unico punto de
+resolucion de identidades (punto 3) es donde entra el directorio, y el TLS del
+punto 8 es la base. Ver meta ADR 0015 (hito `H02`).
