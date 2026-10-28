@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import math
 import re
 import ssl
 import threading
@@ -120,13 +121,15 @@ class LdapDirectoryClient:
                         f"({attribute}={escaped})",
                         search_scope=SUBTREE,
                         attributes=["uid", "mail", "memberOf", key_attribute],
-                        time_limit=max(1, int(self._config.timeout_seconds)),
+                        time_limit=self._ldap_timeout_seconds(),
                     )
                     return [
                         _ldap_entry(item.entry_attributes_as_dict, key_attribute)
                         for item in connection.entries
                     ]
-                except (LDAPException, OSError, TimeoutError, ssl.SSLError) as exc:
+                except DirectoryUnavailableError:
+                    raise
+                except Exception as exc:
                     self._discard_connection(LDAPException)
                     if attempt == 0:
                         continue
@@ -154,12 +157,15 @@ class LdapDirectoryClient:
             server,
             user=self._config.bind_dn,
             password=self._password,
-            receive_timeout=self._config.timeout_seconds,
+            receive_timeout=self._ldap_timeout_seconds(),
             raise_exceptions=True,
         )
         if not connection.bind():
             raise OSError("el bind del directorio fallo")
         return connection
+
+    def _ldap_timeout_seconds(self) -> int:
+        return max(1, math.ceil(self._config.timeout_seconds))
 
     def _discard_connection(self, ldap_exception) -> None:
         connection = self._connection
@@ -168,7 +174,7 @@ class LdapDirectoryClient:
             return
         try:
             connection.unbind()
-        except (ldap_exception, OSError, TimeoutError):
+        except Exception:
             pass
 
 

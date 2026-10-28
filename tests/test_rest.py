@@ -9,7 +9,9 @@ import httpx
 import pytest
 
 from ianest_edge.client import ForwardedJson
+from ianest_edge.identity import DirectoryIdentityResolver, LdapDirectoryClient
 from ianest_edge.rest import create_app
+from ianest_edge.service import EdgeService
 
 from .conftest import BEARER, KEY
 
@@ -325,3 +327,32 @@ def test_directory_down_is_503_for_all_faces(
     record = _audit(config)[-1]
     assert record["face"] == face
     assert record["outcome"] == "directory_unavailable"
+
+
+def test_arbitrary_ldap_bind_error_is_503_and_audited(
+    config, extended, monkeypatch
+):
+    import ldap3
+
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bind(self):
+            raise ValueError("bind inesperado")
+
+    monkeypatch.setattr(ldap3, "Server", lambda *args, **kwargs: object())
+    monkeypatch.setattr(ldap3, "Connection", Connection)
+    resolver = DirectoryIdentityResolver(
+        config, LdapDirectoryClient(config.directory)
+    )
+    service = EdgeService(config, resolver=resolver, client=extended)
+    app = create_app(service.config, service)
+
+    async def request(client):
+        return await client.get("/v1/models", headers=_headers())
+
+    response = _requests(app, [request])[0]
+    assert response.status_code == 503
+    assert response.json()["error"]["type"] == "DirectoryUnavailableError"
+    assert _audit(config)[-1]["outcome"] == "directory_unavailable"

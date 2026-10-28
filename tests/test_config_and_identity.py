@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ianest_edge.config import EdgeConfig
@@ -175,6 +177,41 @@ def test_ldap_network_and_timeout_errors_are_directory_unavailable(
     with pytest.raises(DirectoryUnavailableError):
         client.find("uid", UID, key_attribute=config.directory.key_attribute)
     assert captured["use_ssl"] is True
+
+
+@pytest.mark.parametrize(
+    ("timeout_seconds", "expected_timeout"), [(3.0, 3), (2.1, 3)]
+)
+def test_ldap_receive_timeout_is_a_rounded_up_integer(
+    config, monkeypatch, timeout_seconds, expected_timeout
+):
+    import ldap3
+
+    captured = {}
+
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+            self.entries = []
+
+        def bind(self):
+            return True
+
+        def search(self, *args, **kwargs):
+            captured["time_limit"] = kwargs["time_limit"]
+
+        def unbind(self):
+            return True
+
+    monkeypatch.setattr(ldap3, "Server", lambda *args, **kwargs: object())
+    monkeypatch.setattr(ldap3, "Connection", Connection)
+    directory_config = replace(config.directory, timeout_seconds=timeout_seconds)
+    client = LdapDirectoryClient(directory_config)
+
+    assert client.find("uid", UID, key_attribute="edge-key-sha256") == []
+    assert captured["receive_timeout"] == expected_timeout
+    assert isinstance(captured["receive_timeout"], int)
+    assert captured["time_limit"] == expected_timeout
 
 
 def test_ldap_connection_is_reused_and_reopened_after_search_failure(
