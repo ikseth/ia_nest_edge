@@ -5,6 +5,14 @@ Sin acentos por convencion.
 
 ## [No publicado]
 
+## [0.2.1] - 2026-10-28
+
+### Corregido
+- El reenvio REST y MCP conserva solo `identity.session_id` aportado por el
+  cliente, tras validarlo, y mantiene el resto de la identidad afirmada por el
+  borde. La auditoria solo marca una sustitucion si el cliente intento afirmar
+  otro campo de identidad.
+
 ## [0.2.0] - 2026-10-28
 
 ### Anadido

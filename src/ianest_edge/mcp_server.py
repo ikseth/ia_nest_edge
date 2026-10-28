@@ -59,7 +59,7 @@ def create_mcp_app(service: EdgeService):
         started = time.monotonic()
         capability = params.name
         supplied = dict(params.arguments or {})
-        overridden = "identity" in supplied
+        overridden = service.identity_overridden(supplied)
         if capability not in service.config.allowed_capabilities:
             error = CapabilityNotAllowedError(
                 f"la capacidad {capability!r} no esta permitida", "capability"
@@ -99,7 +99,6 @@ def create_mcp_app(service: EdgeService):
                     route=str(rest["path"]),
                     query="",
                     payload=supplied,
-                    identity_overridden=overridden,
                     started=started,
                     face="mcp",
                 )
@@ -139,7 +138,7 @@ def create_mcp_app(service: EdgeService):
 
     server = Server(
         "ia_nest_edge",
-        version="0.2.0",
+        version="0.2.1",
         instructions=(
             "Herramientas derivadas de capability.list y limitadas por la "
             "configuracion del borde. La identidad la afirma el borde."

@@ -105,7 +105,7 @@ def test_non_asserting_account_identity_reaches_openai_and_rest(service, extende
         assert identity["service"] == "api"
 
 
-def test_rest_forwards_method_query_and_overrides_identity(
+def test_rest_forwards_session_and_overrides_other_identity_fields(
     service, extended, config
 ):
     app = create_app(service.config, service)
@@ -114,7 +114,14 @@ def test_rest_forwards_method_query_and_overrides_identity(
         return await client.post(
             "/rest/prompt/run?dry=true",
             headers=_headers(),
-            json={"prompt": "hola", "identity": {"user_id": "attacker"}},
+            json={
+                "prompt": "hola",
+                "identity": {
+                    "user_id": "otro",
+                    "service": "x",
+                    "session_id": "s1",
+                },
+            },
         )
 
     response = _requests(app, [request])[0]
@@ -125,10 +132,63 @@ def test_rest_forwards_method_query_and_overrides_identity(
         "user_id": "adult_user",
         "service": "open_webui",
         "interlocutor_profile": "adult",
+        "session_id": "s1",
     }
     record = _audit(config)[-1]
     assert record["identity_overridden"] is True
     assert record["face"] == "rest"
+
+
+def test_rest_forwards_only_client_session_without_identity_override(
+    service, extended, config
+):
+    app = create_app(service.config, service)
+
+    async def request(client):
+        return await client.post(
+            "/rest/prompt/run",
+            headers=_headers(),
+            json={"prompt": "hola", "identity": {"session_id": "s1"}},
+        )
+
+    response = _requests(app, [request])[0]
+    assert response.status_code == 200
+    call = next(item for item in extended.calls if item[0] == "forward")
+    assert call[4]["identity"] == {
+        "user_id": "adult_user",
+        "service": "open_webui",
+        "interlocutor_profile": "adult",
+        "session_id": "s1",
+    }
+    assert _audit(config)[-1]["identity_overridden"] is False
+
+
+@pytest.mark.parametrize(
+    "supplied_identity",
+    [
+        "no es un objeto",
+        {"session_id": 1},
+        {"session_id": ""},
+        {"session_id": "x" * 201},
+        {"session_id": "s1\n"},
+    ],
+)
+def test_rest_rejects_invalid_client_identity_and_audits(
+    service, extended, config, supplied_identity
+):
+    app = create_app(service.config, service)
+
+    async def request(client):
+        return await client.post(
+            "/rest/prompt/run",
+            headers=_headers(),
+            json={"prompt": "hola", "identity": supplied_identity},
+        )
+
+    response = _requests(app, [request])[0]
+    assert response.status_code == 400
+    assert not any(call[0] == "forward" for call in extended.calls)
+    assert _audit(config)[-1]["outcome"] == "error"
 
 
 @pytest.mark.parametrize(

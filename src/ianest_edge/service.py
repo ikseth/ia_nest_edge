@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import unicodedata
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -387,22 +388,20 @@ class EdgeService:
         capability: str,
         query: str,
         payload: dict[str, Any],
-        identity_overridden: bool,
         started: float,
         route: str | None = None,
         face: str = "rest",
     ) -> ForwardedJson | ForwardedStream:
         state = _state_for(identity, face=face)
         state.capability = capability
-        state.identity_overridden = identity_overridden
+        state.identity_overridden = self.identity_overridden(payload)
         if capability not in self.config.allowed_capabilities:
             self._write_audit(state, "capability_not_allowed", started)
             raise CapabilityNotAllowedError(
                 f"la capacidad {capability!r} no esta permitida", "capability"
             )
-        payload = dict(payload)
-        payload["identity"] = _identity_payload(identity)
         try:
+            payload = _forward_payload(identity, payload)
             result = self.client.forward(
                 method,
                 route or "/" + capability.replace(".", "/"),
@@ -421,6 +420,13 @@ class EdgeService:
         outcome = "ok" if result.status_code < 400 else "error"
         self._write_audit(state, outcome, started)
         return result
+
+    def identity_overridden(self, payload: Mapping[str, Any]) -> bool:
+        """Indica si el cliente intento afirmar algo mas que una sesion."""
+        supplied = payload.get("identity")
+        return "identity" in payload and (
+            not isinstance(supplied, dict) or bool(set(supplied) - {"session_id"})
+        )
 
     def capability_catalog(self) -> dict[str, Any]:
         return self.client.capability_list()
@@ -591,6 +597,34 @@ def _identity_payload(identity: ResolvedIdentity) -> dict[str, str]:
         "service": identity.service,
         INTERLOCUTOR_PROFILE_FIELD: identity.interlocutor_profile,
     }
+
+
+def _forward_payload(
+    identity: ResolvedIdentity, client_payload: Mapping[str, Any]
+) -> dict[str, Any]:
+    payload = dict(client_payload)
+    supplied = payload.get("identity")
+    if "identity" in payload and not isinstance(supplied, dict):
+        raise RequestValidationError("identity debe ser un objeto", "identity")
+
+    forwarded_identity = _identity_payload(identity)
+    if isinstance(supplied, dict) and "session_id" in supplied:
+        session_id = supplied["session_id"]
+        if (
+            not isinstance(session_id, str)
+            or not session_id
+            or len(session_id) > 200
+            or any(unicodedata.category(character) == "Cc" for character in session_id)
+        ):
+            raise RequestValidationError(
+                "identity.session_id debe ser texto no vacio de hasta 200 caracteres sin controles",
+                "identity.session_id",
+            )
+        # Extended guarda por (user_id, session_id); el borde afirma user_id,
+        # asi que el cliente solo puede alcanzar sus propias sesiones.
+        forwarded_identity["session_id"] = session_id
+    payload["identity"] = forwarded_identity
+    return payload
 
 
 def _sessions(payload: dict[str, Any]) -> list[dict[str, Any]]:
