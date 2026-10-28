@@ -98,7 +98,6 @@ def create_app(
                 )
         else:
             payload = {}
-        identity_overridden = "identity" in payload
         result = await run_sync(
             lambda: active_service.forward_rest(
                 identity,
@@ -106,7 +105,6 @@ def create_app(
                 capability=capability,
                 query=request.url.query,
                 payload=payload,
-                identity_overridden=identity_overridden,
                 started=started,
             )
         )

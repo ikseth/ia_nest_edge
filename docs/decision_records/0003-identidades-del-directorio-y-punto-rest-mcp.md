@@ -99,3 +99,22 @@ El directorio dice quien; el fichero dice como.
 
 Cambia la configuracion de forma incompatible y anade dos caras: `v0.2.0`.
 El tag lo corta el operador.
+
+## Anadido el 2026-10-28: la sesion del cliente en `/rest` y `/mcp` (v0.2.1)
+
+Reconciliado con el usuario en el hito `H07` de meta, al conectar el
+recomendador de Kodi por `/rest`.
+
+- Defecto de la segunda entrega: el punto 4 sustituia entero el campo
+  `identity`, y extended exige `identity.session_id` para conversar
+  (`prompt.*`, `reasoning.*`, `task.run`). Ninguna cuenta podia conversar por
+  `/rest` ni por `/mcp`. La prueba del criterio de `H05` solo llamo a
+  `session.*`.
+- Desde `v0.2.1` el borde conserva SOLO el `identity.session_id` del cliente,
+  validado; `user_id`, `service` y perfil los sigue poniendo el borde. Extended
+  guarda las sesiones por (`user_id`, `session_id`), asi que un cliente solo
+  alcanza las suyas.
+- La auditoria marca `identity_overridden` solo si el cliente mando algo mas
+  que su sesion.
+- La piel OpenAI no cambia: alli el borde deriva la sesion del chat (edge ADR
+  0002, punto 6).

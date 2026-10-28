@@ -113,7 +113,7 @@ def test_all_mcp_mount_paths_require_authentication(service, directory, path):
     assert unavailable.status_code == 503
 
 
-def test_tools_call_uses_rest_projection_and_overrides_identity(
+def test_tools_call_uses_rest_projection_and_forwards_session(
     service, extended, config
 ):
     app = create_app(service.config, service)
@@ -127,7 +127,7 @@ def test_tools_call_uses_rest_projection_and_overrides_identity(
                     "name": "prompt.run",
                     "arguments": {
                         "prompt": "hola",
-                        "identity": {"user_id": "attacker"},
+                        "identity": {"user_id": "attacker", "session_id": "s1"},
                     },
                 },
             )
@@ -137,7 +137,12 @@ def test_tools_call_uses_rest_projection_and_overrides_identity(
     assert result.get("isError", False) is False
     call = next(item for item in extended.calls if item[0] == "forward")
     assert call[1:3] == ("POST", "/prompt/run")
-    assert call[4]["identity"]["user_id"] == "adult_user"
+    assert call[4]["identity"] == {
+        "user_id": "adult_user",
+        "service": "open_webui",
+        "interlocutor_profile": "adult",
+        "session_id": "s1",
+    }
     record = _audit(config)[-1]
     assert record["face"] == "mcp"
     assert record["identity_overridden"] is True
