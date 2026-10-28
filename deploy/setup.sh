@@ -55,6 +55,8 @@ EDGE_HOST=''
 EDGE_PORT=''
 EDGE_TLS_CERT=''
 EDGE_TLS_KEY=''
+DIRECTORY_CA_FILE=''
+DIRECTORY_PASSWORD_FILE=''
 
 usage() {
   sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
@@ -173,6 +175,8 @@ print(config.host)
 print(config.port)
 print("-" if config.tls is None else config.tls.certfile)
 print("-" if config.tls is None else config.tls.keyfile)
+print(config.directory.ca_file)
+print(config.directory.bind_password_file)
 PY
 )"
   status=$?
@@ -180,13 +184,37 @@ PY
   ((status == 0)) || error "EDGE_CONFIG no es valida: $path"
   local -a details=()
   mapfile -t details <<< "$output"
-  ((${#details[@]} == 4)) || error "EDGE_CONFIG no produjo sus datos de escucha: $path"
+  ((${#details[@]} == 6)) || error "EDGE_CONFIG no produjo sus datos de despliegue: $path"
   EDGE_HOST="${details[0]}"
   EDGE_PORT="${details[1]}"
   EDGE_TLS_CERT="${details[2]}"
   EDGE_TLS_KEY="${details[3]}"
+  DIRECTORY_CA_FILE="${details[4]}"
+  DIRECTORY_PASSWORD_FILE="${details[5]}"
   if [[ "$EDGE_TLS_CERT" == - ]]; then EDGE_TLS_CERT=''; fi
   if [[ "$EDGE_TLS_KEY" == - ]]; then EDGE_TLS_KEY=''; fi
+}
+
+check_directory_files() {
+  if ! "$DEPLOY_PYTHON" - "${VALUES[OPERATOR_USER]}" "$DIRECTORY_CA_FILE" "$DIRECTORY_PASSWORD_FILE" <<'PY'
+import os
+import pwd
+import sys
+
+account = pwd.getpwnam(sys.argv[1])
+if os.geteuid() != account.pw_uid:
+    if os.geteuid() != 0:
+        raise SystemExit(1)
+    os.initgroups(account.pw_name, account.pw_gid)
+    os.setgid(account.pw_gid)
+    os.setuid(account.pw_uid)
+for path in sys.argv[2:]:
+    with open(path, "rb"):
+        pass
+PY
+  then
+    error "el usuario del servicio no puede leer directory.ca_file o directory.bind_password_file"
+  fi
 }
 
 resolve_paths() {
@@ -377,6 +405,7 @@ if [[ "$PRINT_CONFIG" == true ]]; then print_config; exit 0; fi
 check_dependencies
 resolve_paths
 select_effective_config
+check_directory_files
 prepare_directories
 install_config
 prepare_venv

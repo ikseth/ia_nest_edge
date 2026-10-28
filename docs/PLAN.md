@@ -1,7 +1,7 @@
 # Plan de ia_nest_edge
 
 Estado: propuesta
-Version: 0.3 - 2026-10-27 (primera entrega hecha; orden entre capas en meta, H01)
+Version: 0.4 - 2026-10-28 (segunda entrega hecha; orden entre capas en meta)
 
 El orden de este repo respecto a otras capas no se fija aqui: vive en la hoja
 de ruta del ente (`ia_nest_meta/docs/plan/HOJA_DE_RUTA.md`, meta ADR 0014).
@@ -17,12 +17,22 @@ la visita de laboratorio del 2026-10-26/27: criterios 2, 3 y 4 pasan; el 1,
 parcial (Open WebUI si; Kodi y HA, fuera). Evidencia en el laboratorio del
 operador, fuera de este repo.
 
+## Segunda entrega: directorio y punto REST/MCP (hecha)
+
+Detalle reconciliado en edge ADR 0003, hito `H05` de meta. La configuracion ya
+no contiene identidades: cada peticion autentica `Bearer <uid>.<secreto>` por
+LDAPS verificado y resuelve cuenta, clase, persona y perfil sin cache. El fallo
+del directorio cierra las tres caras con 503 sin impedir el arranque.
+
+El contrato uniforme de extended se ofrece por `/rest/{ruta}` y `/mcp`, con
+identidad afirmada por el borde y lista de capacidades permitidas. MCP deriva
+sus herramientas del catalogo vivo; el reenvio REST no contiene casos por
+capacidad. La piel OpenAI conserva su traduccion y usa la misma identidad.
+
 ## Lo que sigue, por hito de meta
 
 | Que | Hito |
 |---|---|
-| Fuente de identidades en el directorio (edge ADR 0002, punto 2) | H05 |
-| Reenvio del contrato de extended (REST y MCP): el punto comun para servicios y agentes | H05 |
 | TLS en los tramos que cruzan el perimetro (edge ADR 0002, punto 8) | H06 |
 | Diseno por consumidor: Kodi (su `system`, sin memoria), HA (estado de la casa), `write_back=false` por consumidor para el agente | H07 |
 

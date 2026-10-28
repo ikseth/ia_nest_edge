@@ -4,13 +4,13 @@ import time
 
 from ianest_edge.errors import DownstreamError
 
-from .conftest import KEY
+from .conftest import BEARER
 from .test_service import _body
 
 
 def _identity(service):
     return service.authenticate_and_resolve(
-        f"Bearer {KEY}", {"X-Person": "adult"}
+        BEARER, {"X-Person": "adult@test"}
     )
 
 
@@ -36,15 +36,15 @@ def test_different_chats_do_not_share_and_same_chat_continues(service, extended)
     _run(service, {"X-Chat": "one"})
     repeated = _session_for_call(extended)
 
-    assert first == "chat-one-1"
-    assert second == "chat-two-1"
+    assert first == "chat_service-one-1"
+    assert second == "chat_service-two-1"
     assert repeated == first
 
 
 def test_archived_chat_creates_next_suffix(service, extended):
     extended.sessions = [
         {
-            "session_id": "chat-one-1",
+            "session_id": "chat_service-one-1",
             "status": "archivada",
             "last_activity_at": "2026-10-21T00:00:00+00:00",
         }
@@ -52,7 +52,7 @@ def test_archived_chat_creates_next_suffix(service, extended):
 
     _run(service, {"X-Chat": "one"})
 
-    assert _session_for_call(extended) == "chat-one-2"
+    assert _session_for_call(extended) == "chat_service-one-2"
 
 
 def test_duplicate_chat_session_creation_uses_winning_active_session(
@@ -61,7 +61,7 @@ def test_duplicate_chat_session_creation_uses_winning_active_session(
     original_new = extended.session_new
 
     def duplicate_then_publish(identity, session_id=None):
-        if session_id == "chat-one-1":
+        if session_id == "chat_service-one-1":
             extended.sessions.append({
                 "session_id": session_id,
                 "status": "activa",
@@ -80,7 +80,7 @@ def test_duplicate_chat_session_creation_uses_winning_active_session(
     extended.session_new = duplicate_then_publish
     _run(service, {"X-Chat": "one"})
 
-    assert _session_for_call(extended) == "chat-one-1"
+    assert _session_for_call(extended) == "chat_service-one-1"
 
 
 def test_without_chat_one_user_message_always_creates(service, extended):

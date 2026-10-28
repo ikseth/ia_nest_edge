@@ -29,8 +29,17 @@ dependencias; el registro de capas del ente es un indice que lo refleja.
   Rango verificado: `v0.5.2`. El resto de `>=0.5 <0.6` sigue declarado, no
   medido.
 
+  La segunda entrega usa ademas `capability.list` y sus proyecciones `rest`,
+  `mcp` y `streaming` para construir MCP, y reenvia cualquier ruta REST
+  permitida sin importar codigo de extended.
+
 - `ia_nest_core`, solo a traves de extended (garantia de transparencia de
   extended). El borde no llama al core directamente.
+
+## Dependencias de ejecucion relevantes
+
+- `ldap3 >=2.9 <3`; verificado con 2.9.1. Cliente Python puro para LDAPS.
+- `mcp >=2.3 <3`; verificado con 2.3.0. SDK oficial para Streamable HTTP.
 
 ## Pendiente de entrega en otras capas
 

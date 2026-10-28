@@ -1,160 +1,265 @@
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
 from ianest_edge.config import EdgeConfig
-from ianest_edge.errors import AuthenticationError, ConfigurationError
-from ianest_edge.identity import FileIdentityResolver
+from ianest_edge.errors import (
+    AuthenticationError,
+    AuthorizationError,
+    ConfigurationError,
+    DirectoryUnavailableError,
+)
+from ianest_edge.identity import (
+    DirectoryEntry,
+    DirectoryIdentityResolver,
+    LdapDirectoryClient,
+)
 
-from .conftest import KEY, config_dict
+from .conftest import BEARER, KEY, KEY_HASH, UID, config_dict
 
 
-def test_authentication_rejects_before_any_downstream_call(service, extended):
+@pytest.mark.parametrize(
+    "authorization",
+    [None, "", "Basic x", "Bearer no-point", "Bearer A.bad", "Bearer a."],
+)
+def test_invalid_bearer_form_never_queries_directory(config, directory, authorization):
+    resolver = DirectoryIdentityResolver(config, directory)
     with pytest.raises(AuthenticationError):
-        service.authenticate_and_resolve(None, {})
+        resolver.authenticate(authorization)
+    assert directory.calls == []
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda directory: directory.entries.pop(0),
+        lambda directory: directory.entries.__setitem__(
+            0,
+            DirectoryEntry(UID, "service@test", frozenset(), KEY_HASH),
+        ),
+        lambda directory: directory.entries.__setitem__(
+            0,
+            DirectoryEntry(
+                UID,
+                "service@test",
+                frozenset({"ia_nest_services", "edge_class_open_webui"}),
+                None,
+            ),
+        ),
+    ],
+)
+def test_unknown_outside_services_and_missing_key_are_401(
+    config, directory, mutation
+):
+    mutation(directory)
+    resolver = DirectoryIdentityResolver(config, directory)
     with pytest.raises(AuthenticationError):
-        service.authenticate_and_resolve("Bearer wrong", {})
-    assert extended.calls == []
+        resolver.authenticate(BEARER)
 
 
-def test_person_resolution_fails_closed(config):
-    resolver = FileIdentityResolver(config)
-    consumer = resolver.authenticate(f"Bearer {KEY}")
-
-    declared = resolver.resolve(consumer, {"X-Person": "child"})
-    absent = resolver.resolve(consumer, {})
-    unknown = resolver.resolve(consumer, {"X-Person": "nobody"})
-    bad_profile = resolver.resolve(consumer, {"X-Person": "unknown_profile"})
-
-    assert declared.interlocutor_profile == "child"
-    assert absent.user_id == unknown.user_id == "guest"
-    assert absent.interlocutor_profile == unknown.interlocutor_profile == "child"
-    assert bad_profile.interlocutor_profile == "child"
+def test_wrong_secret_is_401(config, directory):
+    resolver = DirectoryIdentityResolver(config, directory)
+    with pytest.raises(AuthenticationError):
+        resolver.authenticate(f"Bearer {UID}.wrong")
 
 
-def test_guest_profile_is_always_child_even_if_config_declares_other(tmp_path):
+@pytest.mark.parametrize(
+    ("mail", "profile"),
+    [
+        ("adult@test", "adult"),
+        ("child@test", "child"),
+        ("both@test", "child"),
+        ("unknown@test", "child"),
+    ],
+)
+def test_person_profile_fails_closed(config, directory, mail, profile):
+    resolver = DirectoryIdentityResolver(config, directory)
+    account = resolver.authenticate(BEARER)
+    identity = resolver.resolve(account, {"X-Person": mail})
+    assert identity.interlocutor_profile == profile
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-Person": "missing@test"}, {"X-Person": "outside@test"}])
+def test_asserted_person_must_be_present_unique_and_user(config, directory, headers):
+    resolver = DirectoryIdentityResolver(config, directory)
+    account = resolver.authenticate(BEARER)
+    with pytest.raises(AuthorizationError):
+        resolver.resolve(account, headers)
+
+
+def test_directory_change_applies_on_next_request(config, directory):
+    resolver = DirectoryIdentityResolver(config, directory)
+    account = resolver.authenticate(BEARER)
+    assert resolver.resolve(account, {"X-Person": "adult@test"}).user_id == "adult_user"
+    directory.entries = [item for item in directory.entries if item.mail != "adult@test"]
+    account = resolver.authenticate(BEARER)
+    with pytest.raises(AuthorizationError):
+        resolver.resolve(account, {"X-Person": "adult@test"})
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [
+        {"ia_nest_services"},
+        {"ia_nest_services", "edge_class_api", "edge_class_open_webui"},
+        {"ia_nest_services", "edge_class_missing"},
+    ],
+)
+def test_account_requires_exactly_one_declared_class(config, directory, groups):
+    directory.entries[0] = DirectoryEntry(
+        UID, "service@test", frozenset(groups), KEY_HASH
+    )
+    with pytest.raises(AuthorizationError):
+        DirectoryIdentityResolver(config, directory).authenticate(BEARER)
+
+
+def test_prototype_menu_depends_on_subject_group(config, directory):
+    resolver = DirectoryIdentityResolver(config, directory)
+    account = resolver.authenticate(BEARER)
+    adult = resolver.resolve(account, {"X-Person": "adult@test"})
+    child = resolver.resolve(account, {"X-Person": "child@test"})
+    assert "iterative" in {item.id for item in adult.menu}
+    assert "iterative" not in {item.id for item in child.menu}
+
+
+def test_account_without_person_assertion_uses_its_own_identity(config, directory):
+    resolver = DirectoryIdentityResolver(config, directory)
+    identity = resolver.resolve(
+        resolver.authenticate(f"Bearer api_service.{KEY}"), {}
+    )
+    assert identity.user_id == "api_service"
+    assert identity.service == "api"
+    assert identity.interlocutor_profile == "adult"
+
+
+def test_directory_unavailable_is_typed_and_recovers(config, directory):
+    resolver = DirectoryIdentityResolver(config, directory)
+    directory.unavailable = True
+    with pytest.raises(DirectoryUnavailableError):
+        resolver.authenticate(BEARER)
+    directory.unavailable = False
+    assert resolver.authenticate(BEARER).uid == UID
+
+
+@pytest.mark.parametrize("kind", ["refused", "timeout"])
+def test_ldap_network_and_timeout_errors_are_directory_unavailable(
+    config, monkeypatch, kind
+):
+    import ldap3
+    from ldap3.core.exceptions import (
+        LDAPResponseTimeoutError,
+        LDAPSocketOpenError,
+    )
+
+    captured = {}
+
+    def server(*args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    class FailingConnection:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bind(self):
+            if kind == "refused":
+                raise LDAPSocketOpenError("refused")
+            raise LDAPResponseTimeoutError("timeout")
+
+        def unbind(self):
+            return True
+
+    monkeypatch.setattr(ldap3, "Server", server)
+    monkeypatch.setattr(ldap3, "Connection", FailingConnection)
+    client = LdapDirectoryClient(config.directory)
+    with pytest.raises(DirectoryUnavailableError):
+        client.find("uid", UID, key_attribute=config.directory.key_attribute)
+    assert captured["use_ssl"] is True
+
+
+def test_ldap_connection_is_reused_and_reopened_after_search_failure(
+    config, monkeypatch
+):
+    import ldap3
+    from ldap3.core.exceptions import LDAPSocketOpenError
+
+    class Entry:
+        entry_attributes_as_dict = {
+            "uid": [UID],
+            "mail": ["service@test"],
+            "memberOf": [],
+            "edge-key-sha256": [KEY_HASH],
+        }
+
+    class Connection:
+        instances = []
+        fail_stale_connection = False
+
+        def __init__(self, *args, **kwargs):
+            self.number = len(self.instances)
+            self.entries = []
+            self.instances.append(self)
+
+        def bind(self):
+            return True
+
+        def search(self, *args, **kwargs):
+            if self.fail_stale_connection and self.number == 0:
+                raise LDAPSocketOpenError("conexion perdida")
+            self.entries = [Entry()]
+
+        def unbind(self):
+            return True
+
+    monkeypatch.setattr(ldap3, "Server", lambda *args, **kwargs: object())
+    monkeypatch.setattr(ldap3, "Connection", Connection)
+    client = LdapDirectoryClient(config.directory)
+
+    assert client.find("uid", UID, key_attribute="edge-key-sha256")[0].uid == UID
+    assert client.find("uid", UID, key_attribute="edge-key-sha256")[0].uid == UID
+    assert len(Connection.instances) == 1
+    Connection.fail_stale_connection = True
+    assert client.find("uid", UID, key_attribute="edge-key-sha256")[0].uid == UID
+    assert client.find("uid", UID, key_attribute="edge-key-sha256")[0].uid == UID
+    assert len(Connection.instances) == 2
+
+
+@pytest.mark.parametrize("legacy", ["consumers", "people", "key_sha256", "guest"])
+def test_legacy_identity_keys_are_rejected_anywhere(tmp_path, legacy):
     raw = config_dict(tmp_path)
-    raw["guest"]["profile"] = "adult"
-
-    config = EdgeConfig.from_dict(raw)
-
-    assert config.guest.profile == "child"
-
-
-def test_person_header_is_ignored_when_consumer_cannot_assert_people(tmp_path):
-    raw = config_dict(tmp_path)
-    consumer = raw["consumers"]["chat"]
-    consumer["can_assert_people"] = False
-    config = EdgeConfig.from_dict(raw)
-    resolver = FileIdentityResolver(config)
-    authenticated = resolver.authenticate(f"Bearer {KEY}")
-
-    resolved = resolver.resolve(authenticated, {"X-Person": "child"})
-
-    assert resolved.user_id == "shared"
-    assert resolved.interlocutor_profile == "adult"
-
-
-def test_key_hash_is_sha256(config):
-    assert config.consumers[0].key_sha256 == hashlib.sha256(
-        KEY.encode("utf-8")
-    ).hexdigest()
-
-
-def test_write_memory_defaults_to_true(config):
-    assert config.consumers[0].write_memory is True
-
-
-def test_tls_loads_when_certificate_and_key_exist(tmp_path):
-    raw = config_dict(tmp_path)
-    certfile = tmp_path / "edge-cert.pem"
-    keyfile = tmp_path / "edge-key.pem"
-    certfile.touch()
-    keyfile.touch()
-    raw["server"]["tls"] = {
-        "certfile": str(certfile),
-        "keyfile": str(keyfile),
-    }
-
-    config = EdgeConfig.from_dict(raw)
-
-    assert config.tls is not None
-    assert config.tls.certfile == certfile
-    assert config.tls.keyfile == keyfile
-
-
-@pytest.mark.parametrize("field", ["certfile", "keyfile"])
-def test_tls_rejects_only_one_declared(tmp_path, field):
-    raw = config_dict(tmp_path)
-    raw["server"]["tls"] = {field: str(tmp_path / f"{field}.pem")}
-
-    with pytest.raises(ConfigurationError, match="certfile y keyfile juntos"):
+    raw["classes"]["api"]["nested"] = {legacy: "forbidden"}
+    with pytest.raises(ConfigurationError, match="primera entrega"):
         EdgeConfig.from_dict(raw)
 
 
-def test_tls_rejects_missing_file(tmp_path):
+def test_directory_requires_ldaps(tmp_path):
     raw = config_dict(tmp_path)
-    certfile = tmp_path / "edge-cert.pem"
-    certfile.touch()
-    missing_keyfile = tmp_path / "missing-key.pem"
-    raw["server"]["tls"] = {
-        "certfile": str(certfile),
-        "keyfile": str(missing_keyfile),
-    }
-
-    with pytest.raises(ConfigurationError, match="fichero TLS no existe") as exc_info:
-        EdgeConfig.from_dict(raw)
-
-    assert exc_info.value.field == "server.tls.keyfile"
-
-
-@pytest.mark.parametrize("value", ["false", 0, None])
-def test_non_boolean_write_memory_rejects_configuration(tmp_path, value):
-    raw = config_dict(tmp_path)
-    raw["consumers"]["chat"]["write_memory"] = value
-
-    with pytest.raises(ConfigurationError, match="write_memory debe ser booleano"):
+    raw["directory"]["url"] = "ldap://directory.test"
+    with pytest.raises(ConfigurationError, match="ldaps"):
         EdgeConfig.from_dict(raw)
 
 
-def test_startup_rejects_child_non_direct_mode(tmp_path, extended):
+def test_menu_without_prototypes_has_one_default(tmp_path):
     raw = config_dict(tmp_path)
-    raw["guest"]["menu"][0]["mode"] = "razonado"
-    config = EdgeConfig.from_dict(raw)
-    service = __import__("ianest_edge").EdgeService(
-        config, resolver=FileIdentityResolver(config), client=extended
-    )
-
-    with pytest.raises(ConfigurationError, match="child"):
-        service.validate_startup()
+    raw["classes"]["api"]["menus"]["adult"][0]["default"] = False
+    with pytest.raises(ConfigurationError, match="sin prototipos"):
+        EdgeConfig.from_dict(raw)
 
 
-def test_startup_rejects_iterative_fixed_domain(tmp_path, extended):
-    raw = config_dict(tmp_path)
-    raw["consumers"]["chat"]["people"]["adult"]["menu"][2]["domain"] = "linux"
-    config = EdgeConfig.from_dict(raw)
-    service = __import__("ianest_edge").EdgeService(
-        config, resolver=FileIdentityResolver(config), client=extended
-    )
-
-    with pytest.raises(ConfigurationError, match="domain=auto"):
-        service.validate_startup()
-
-
-def test_startup_rejects_unknown_domain(tmp_path, extended):
-    raw = config_dict(tmp_path)
-    raw["consumers"]["chat"]["people"]["adult"]["menu"][0]["domain"] = "missing"
-    config = EdgeConfig.from_dict(raw)
-    service = __import__("ianest_edge").EdgeService(
-        config, resolver=FileIdentityResolver(config), client=extended
-    )
-
-    with pytest.raises(ConfigurationError, match="no existe"):
-        service.validate_startup()
-
-
-def test_startup_accepts_valid_config(service, extended):
+def test_startup_validates_domains_but_not_directory(service, extended, directory):
+    directory.unavailable = True
     service.validate_startup()
     assert extended.calls == [("domain.list", None)]
+
+
+def test_startup_rejects_unknown_domain(tmp_path, directory, extended):
+    raw = config_dict(tmp_path)
+    raw["classes"]["api"]["menus"]["adult"][0]["domain"] = "missing"
+    config = EdgeConfig.from_dict(raw)
+    edge = __import__("ianest_edge").EdgeService(
+        config,
+        resolver=DirectoryIdentityResolver(config, directory),
+        client=extended,
+    )
+    with pytest.raises(ConfigurationError, match="no existe"):
+        edge.validate_startup()
