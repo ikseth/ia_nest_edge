@@ -145,3 +145,7 @@ sin ninguna), punto REST/MCP comun, TLS en el perimetro y fallo cerrado si el
 directorio no responde. Lo construido sigue valiendo: el unico punto de
 resolucion de identidades (punto 3) es donde entra el directorio, y el TLS del
 punto 8 es la base. Ver meta ADR 0015 (hito `H02`).
+
+2026-10-28: los puntos 2 (fuente de personas, invitado) y 3 (clave por
+consumidor en el fichero) quedan sustituidos por edge ADR 0003 (identidades
+del directorio, clave de API por cuenta, sin invitado). Meta hito `H05`.
