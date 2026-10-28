@@ -18,6 +18,10 @@ def _write_executable(path: Path, content: str) -> None:
 
 
 def _edge_config(path: Path, *, port: int = 8080) -> None:
+    ca_file = path.parent / "directory-ca.pem"
+    password_file = path.parent / "directory-password"
+    ca_file.touch(exist_ok=True)
+    password_file.write_text("bind-password\n", encoding="ascii")
     path.write_text(
         "server:\n"
         '  host: "127.0.0.1"\n'
@@ -26,25 +30,30 @@ def _edge_config(path: Path, *, port: int = 8080) -> None:
         '  base_url: "http://127.0.0.1:8001"\n'
         "audit:\n"
         f'  path: "{path.parent / "edge.jsonl"}"\n'
-        "guest:\n"
-        '  user_id: "guest"\n'
-        "  menu:\n"
-        '    - id: "conversation"\n'
-        '      mode: "directo"\n'
-        '      domain: "auto"\n'
-        "      default: true\n"
-        "consumers:\n"
-        "  chat:\n"
-        '    key_sha256: "0000000000000000000000000000000000000000000000000000000000000000"\n'
-        "    can_assert_people: false\n"
-        "    default_identity:\n"
-        '      user_id: "shared"\n'
-        '      profile: "adult"\n'
-        "      menu:\n"
+        "directory:\n"
+        '  url: "ldaps://directory.test:636"\n'
+        '  base_dn: "dc=example,dc=test"\n'
+        '  people_dn: "ou=people,dc=example,dc=test"\n'
+        f'  ca_file: "{ca_file}"\n'
+        '  bind_dn: "uid=edge,ou=services,dc=example,dc=test"\n'
+        f'  bind_password_file: "{password_file}"\n'
+        "classes:\n"
+        "  api:\n"
+        "    headers: {}\n"
+        "    menus:\n"
+        "      adult:\n"
         '        - id: "conversation"\n'
         '          mode: "directo"\n'
         '          domain: "auto"\n'
-        "          default: true\n",
+        "          default: true\n"
+        "      child:\n"
+        '        - id: "conversation"\n'
+        '          mode: "directo"\n'
+        '          domain: "auto"\n'
+        "          default: true\n"
+        "api:\n"
+        "  allowed_capabilities:\n"
+        '    - "prompt.run"\n',
         encoding="ascii",
     )
 
@@ -219,6 +228,18 @@ def test_installed_configuration_has_mode_640(tmp_path):
     assert result.returncode == 0, result.stderr
     assert installed.stat().st_mode & 0o777 == 0o640
     assert installed.stat().st_uid == os.getuid()
+
+
+def test_service_user_must_read_directory_files(tmp_path):
+    config, edge_config, env, install_root, _, _, _ = _deployment(tmp_path)
+    password_file = tmp_path / "directory-password"
+    password_file.chmod(0)
+
+    result = _run_setup(config, env)
+
+    assert result.returncode != 0
+    assert "usuario del servicio no puede leer" in result.stderr
+    assert not install_root.exists()
 
 
 def test_unit_has_operator_config_and_serve_command(tmp_path):

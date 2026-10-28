@@ -5,15 +5,22 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 from .audit import AuditRecord, AuditWriter
 from .client import ExtendedClient, ExtendedHttpClient, SseEvent
+from .client import ForwardedJson, ForwardedStream
 from .config import EdgeConfig, MenuEntry, PROFILE_CHILD
-from .errors import ConfigurationError, DownstreamError, RequestValidationError
+from .errors import (
+    CapabilityNotAllowedError,
+    ConfigurationError,
+    DownstreamError,
+    EdgeError,
+    RequestValidationError,
+)
 from .identity import IdentityResolver, ResolvedIdentity
 
 INTERLOCUTOR_PROFILE_FIELD = "interlocutor_profile"
@@ -31,6 +38,7 @@ class StreamingResult:
 
 @dataclass(slots=True)
 class _AuditState:
+    face: str = "openai"
     consumer: str | None = None
     user_id: str | None = None
     profile: str | None = None
@@ -41,6 +49,7 @@ class _AuditState:
     background_task: bool = False
     system_messages: int = 0
     finish_reason: str | None = None
+    identity_overridden: bool = False
 
 
 class EdgeService:
@@ -78,10 +87,10 @@ class EdgeService:
             raise ConfigurationError(
                 "domain.list contiene una entrada sin id", "extended.base_url"
             )
-        for field, identity in self._configured_identities():
-            if identity.profile == PROFILE_CHILD:
+        for field, profile, menu in self._configured_menus():
+            if profile == PROFILE_CHILD:
                 invalid = next(
-                    (entry for entry in identity.menu if entry.mode != "directo"),
+                    (entry for entry in menu if entry.mode != "directo"),
                     None,
                 )
                 if invalid is not None:
@@ -89,7 +98,7 @@ class EdgeService:
                         "una identidad child solo puede usar modo directo",
                         f"{field}.menu.{invalid.id}.mode",
                     )
-            for entry in identity.menu:
+            for entry in menu:
                 if entry.mode == "iterativo" and entry.domain != "auto":
                     raise ConfigurationError(
                         "una entrada iterativo debe usar domain=auto",
@@ -110,7 +119,10 @@ class EdgeService:
         return self.resolver.resolve(consumer, headers)
 
     def audit_authentication_failure(self, started: float) -> None:
-        self._write_audit(_AuditState(), "error", started)
+        self._write_audit(_AuditState(), "authentication_failed", started)
+
+    def audit_access_failure(self, face: str, outcome: str, started: float) -> None:
+        self._write_audit(_AuditState(face=face), outcome, started)
 
     def audit_resolved_failure(
         self,
@@ -163,7 +175,7 @@ class EdgeService:
             state.menu_entry = entry.id
             state.mode = entry.mode
             state.background_task = _header_present(
-                headers, identity.consumer.headers.background_task
+                headers, identity.consumer_class.headers.background_task
             )
             prompt = _last_user_message(request["messages"])
             base_identity = _identity_payload(identity)
@@ -185,7 +197,7 @@ class EdgeService:
                     payload["auto_domain"] = True
                 else:
                     payload["domain"] = entry.domain
-            if state.background_task or not identity.consumer.write_memory:
+            if state.background_task or not identity.consumer_class.write_memory:
                 payload["write_back"] = False
             visible_model = request["model"]
             if entry.mode == "iterativo" or not request["stream"]:
@@ -223,9 +235,9 @@ class EdgeService:
         base_identity: dict[str, str],
         messages: list[dict[str, str]],
     ) -> str:
-        chat_id = _header_value(headers, identity.consumer.headers.chat)
+        chat_id = _header_value(headers, identity.consumer_class.headers.chat)
         if chat_id is not None:
-            prefix = f"{identity.consumer.name}-{chat_id}-"
+            prefix = f"{identity.consumer}-{chat_id}-"
             active = _sessions(
                 self.client.session_list(base_identity, "activa")
             )
@@ -367,13 +379,87 @@ class EdgeService:
         else:
             self._write_audit(state, "ok", started)
 
-    def _configured_identities(self):
-        yield "guest", self.config.guest
-        for consumer in self.config.consumers:
-            base = f"consumers.{consumer.name}"
-            yield f"{base}.default_identity", consumer.default_identity
-            for person, identity in consumer.people.items():
-                yield f"{base}.people.{person}", identity
+    def forward_rest(
+        self,
+        identity: ResolvedIdentity,
+        *,
+        method: str,
+        capability: str,
+        query: str,
+        payload: dict[str, Any],
+        identity_overridden: bool,
+        started: float,
+        route: str | None = None,
+        face: str = "rest",
+    ) -> ForwardedJson | ForwardedStream:
+        state = _state_for(identity, face=face)
+        state.capability = capability
+        state.identity_overridden = identity_overridden
+        if capability not in self.config.allowed_capabilities:
+            self._write_audit(state, "capability_not_allowed", started)
+            raise CapabilityNotAllowedError(
+                f"la capacidad {capability!r} no esta permitida", "capability"
+            )
+        payload = dict(payload)
+        payload["identity"] = _identity_payload(identity)
+        try:
+            result = self.client.forward(
+                method,
+                route or "/" + capability.replace(".", "/"),
+                query=query,
+                payload=payload,
+            )
+        except BaseException:
+            self._write_audit(state, "error", started)
+            raise
+        if isinstance(result, ForwardedStream):
+            return ForwardedStream(
+                body=self._audited_forward_stream(result.body, state, started),
+                status_code=result.status_code,
+                content_type=result.content_type,
+            )
+        outcome = "ok" if result.status_code < 400 else "error"
+        self._write_audit(state, outcome, started)
+        return result
+
+    def capability_catalog(self) -> dict[str, Any]:
+        return self.client.capability_list()
+
+    def audit_mcp(
+        self,
+        identity: ResolvedIdentity,
+        capability: str,
+        outcome: str,
+        started: float,
+        *,
+        identity_overridden: bool = False,
+    ) -> None:
+        state = _state_for(identity, face="mcp")
+        state.capability = capability
+        state.identity_overridden = identity_overridden
+        self._write_audit(state, outcome, started)
+
+    def _audited_forward_stream(
+        self,
+        body: Iterator[bytes],
+        state: _AuditState,
+        started: float,
+    ) -> Iterator[bytes]:
+        try:
+            yield from body
+        except GeneratorExit:
+            self._write_audit(state, "interrupted", started)
+            raise
+        except BaseException:
+            self._write_audit(state, "error", started)
+            raise
+        else:
+            self._write_audit(state, "ok", started)
+
+    def _configured_menus(self):
+        for name, consumer_class in self.config.classes.items():
+            for profile, menu in consumer_class.menus.items():
+                yield f"classes.{name}.menus.{profile}", profile, menu
 
     def _write_audit(
         self,
@@ -383,6 +469,7 @@ class EdgeService:
     ) -> None:
         self.audit.write(
             AuditRecord(
+                face=state.face,
                 consumer=state.consumer,
                 user_id=state.user_id,
                 interlocutor_profile=state.profile,
@@ -394,14 +481,16 @@ class EdgeService:
                 discarded_system_messages=state.system_messages,
                 outcome=outcome,
                 finish_reason=state.finish_reason,
+                identity_overridden=state.identity_overridden,
                 latency_ms=max(0, int((time.monotonic() - started) * 1000)),
             )
         )
 
 
-def _state_for(identity: ResolvedIdentity) -> _AuditState:
+def _state_for(identity: ResolvedIdentity, *, face: str = "openai") -> _AuditState:
     return _AuditState(
-        consumer=identity.consumer.name,
+        face=face,
+        consumer=identity.consumer,
         user_id=identity.user_id,
         profile=identity.interlocutor_profile,
     )

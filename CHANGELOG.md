@@ -5,6 +5,28 @@ Sin acentos por convencion.
 
 ## [No publicado]
 
+## [0.2.0] - 2026-10-28
+
+### Anadido
+- Resolucion de cuentas y personas por LDAPS verificado, sin cache ni respaldo;
+  clave `Bearer <uid>.<secreto>` y fallo cerrado 503 si el directorio no esta
+  disponible (edge ADR 0003).
+- Clases, perfiles y menus desde grupos del directorio, con entradas prototipo
+  gobernadas por `edge_prototypes`.
+- Reenvio generico `/rest/{ruta}` con identidad sustituida, query y flujos SSE.
+- Servidor MCP Streamable HTTP con herramientas derivadas de
+  `capability.list` y llamadas por la proyeccion REST del catalogo.
+- Lista de capacidades permitidas para REST y MCP y auditoria por cara.
+
+### Cambiado
+- Configuracion incompatible: elimina identidades, invitado y hashes del YAML;
+  anade `directory`, `classes` y `api.allowed_capabilities`.
+- `deploy/setup.sh` comprueba la lectura de la CA y la contrasena de bind por el
+  usuario del servicio.
+
+### Dependencias
+- `ldap3 >=2.9 <3` y `mcp >=2.3 <3`.
+
 ## [0.1.1] - 2026-10-26
 
 ### Corregido

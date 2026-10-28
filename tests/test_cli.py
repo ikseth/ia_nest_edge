@@ -12,6 +12,15 @@ from ianest_edge.config import EdgeConfig
 from .conftest import config_dict
 
 
+def test_key_help_explains_bearer_and_directory_attribute(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.key_main(["--help"])
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "Bearer <uid>.<secreto>" in output
+    assert "atributo de la cuenta" in output
+
+
 @pytest.mark.parametrize("tls_enabled", [False, True])
 def test_serve_passes_tls_options_only_when_configured(
     tmp_path, monkeypatch, tls_enabled

@@ -1,14 +1,11 @@
 # Configuracion de ejemplo de ia_nest_edge.
-# Copiar a config/edge.yaml y no versionar el fichero efectivo.
+# Copiar fuera del repositorio y no versionar el fichero efectivo.
+# No contiene identidades: cuentas, personas, claves, perfiles y clases viven
+# en el directorio.
 
 server:
-  # Escucha solo en la red que el operador haya protegido.
   host: "127.0.0.1"
   port: 8080
-  # TLS es opcional: certfile y keyfile se declaran juntos.
-  # El certificado debe venir de una CA propia instalada en cada cliente.
-  # Desactivar la verificacion en el cliente cifra, pero no protege contra quien
-  # se haga pasar por el borde.
   # tls:
   #   certfile: "/ruta/al/certificado.pem"
   #   keyfile: "/ruta/a/la-clave-privada.pem"
@@ -19,80 +16,78 @@ extended:
   inactivity_timeout_seconds: 600
 
 audit:
-  # Es salida de ejecucion: debe quedar fuera del repo.
-  path: "local/audit/edge.jsonl"
+  path: "/opt/ia_nest/state/edge/family/audit/edge.jsonl"
 
-# Identidad cerrada para una persona ausente o no declarada.
-guest:
-  user_id: "guest"
-  menu:
-    - id: "conversacion"
-      mode: "directo"
-      domain: "auto"
-      default: true
+directory:
+  url: "ldaps://directory.internal:636"
+  base_dn: "dc=example,dc=internal"
+  people_dn: "ou=people,dc=example,dc=internal"
+  ca_file: "/ruta/a/directory-ca.pem"
+  bind_dn: "uid=ia_nest_edge,ou=services,dc=example,dc=internal"
+  bind_password_file: "/ruta/a/directory-bind-password"
+  timeout_seconds: 3
+  key_attribute: "edge-key-sha256"
+  groups:
+    users: "ia_nest_users"
+    services: "ia_nest_services"
+    adult: "profile_adult"
+    child: "profile_child"
+    asserts_people: "edge_asserts_people"
+    prototypes: "edge_prototypes"
+    class_prefix: "edge_class_"
 
-consumers:
-  family_chat:
-    # Sustituir por la salida `sha256` de `ianest-edge key`.
-    key_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
-    can_assert_people: true
+classes:
+  open_webui:
     headers:
-      chat: "X-Chat-Id"
-      person: "X-Person-Id"
-      background_task: "X-Background-Task"
-    default_identity:
-      user_id: "shared_device"
-      # Un perfil ausente o desconocido se convierte en child.
-      profile: "child"
-      menu:
+      chat: "X-OpenWebUI-Chat-Id"
+      person: "X-OpenWebUI-User-Email"
+      background_task: "X-OpenWebUI-Task"
+    write_memory: true
+    menus:
+      adult:
+        - id: "directo"
+          mode: "directo"
+          domain: "auto"
+          default: true
+        - id: "razonado"
+          mode: "razonado"
+          domain: "auto"
+        - id: "iterativo_prototipo"
+          mode: "iterativo"
+          domain: "auto"
+          prototype: true
+      child:
         - id: "conversacion"
           mode: "directo"
           domain: "auto"
           default: true
-    people:
-      operator:
-        user_id: "operator"
-        profile: "adult"
-        menu:
-          - id: "directo"
-            mode: "directo"
-            domain: "auto"
-            default: true
-          - id: "razonado"
-            mode: "razonado"
-            domain: "auto"
-            default: false
-          - id: "iterativo_prototipo"
-            mode: "iterativo"
-            domain: "auto"
-            default: false
 
-  home_assistant_device:
-    # Cada dispositivo usa una clave distinta.
-    key_sha256: "1111111111111111111111111111111111111111111111111111111111111111"
-    can_assert_people: false
-    headers:
-      chat: "X-Conversation-Id"
-    default_identity:
-      user_id: "home_assistant_device"
-      profile: "adult"
-      menu:
-        - id: "casa"
+  api:
+    headers: {}
+    write_memory: true
+    menus:
+      adult:
+        - id: "directo"
+          mode: "directo"
+          domain: "auto"
+          default: true
+      child:
+        - id: "conversacion"
           mode: "directo"
           domain: "auto"
           default: true
 
-  linux_agent:
-    # Los informes efimeros de agentes pueden consultar memoria y RAG, pero no
-    # dejan write-back en extended.
-    key_sha256: "2222222222222222222222222222222222222222222222222222222222222222"
-    can_assert_people: false
-    write_memory: false
-    default_identity:
-      user_id: "linux_agent"
-      profile: "adult"
-      menu:
-        - id: "informe"
-          mode: "directo"
-          domain: "auto"
-          default: true
+api:
+  allowed_capabilities:
+    - "capability.list"
+    - "prompt.run"
+    - "prompt.stream"
+    - "reasoning.run"
+    - "reasoning.stream"
+    - "task.run"
+    - "session.list"
+    - "session.show"
+    - "session.new"
+    - "memory.recall"
+    - "knowledge.status"
+    - "runtime.health"

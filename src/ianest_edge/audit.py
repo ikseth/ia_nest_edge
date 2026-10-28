@@ -10,6 +10,7 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class AuditRecord:
+    face: str
     consumer: str | None
     user_id: str | None
     interlocutor_profile: str | None
@@ -21,6 +22,7 @@ class AuditRecord:
     discarded_system_messages: int
     outcome: str
     finish_reason: str | None
+    identity_overridden: bool
     latency_ms: int
     timestamp: str = ""
 

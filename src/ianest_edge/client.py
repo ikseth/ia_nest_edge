@@ -8,11 +8,7 @@ from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from typing import Any, Iterator, Protocol
 from urllib.parse import urlsplit
 
-from .errors import (
-    DownstreamError,
-    ExtendedConnectionError,
-    ExtendedResponseError,
-)
+from .errors import DownstreamError, ExtendedConnectionError, ExtendedResponseError
 
 EXTENDED_ORIGIN = "ia_nest_extended"
 
@@ -23,8 +19,24 @@ class SseEvent:
     data: Any
 
 
+@dataclass(frozen=True, slots=True)
+class ForwardedJson:
+    payload: Any
+    status_code: int
+    content_type: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ForwardedStream:
+    body: Iterator[bytes]
+    status_code: int
+    content_type: str
+
+
 class ExtendedClient(Protocol):
     def domain_list(self) -> dict[str, Any]: ...
+
+    def capability_list(self) -> dict[str, Any]: ...
 
     def session_list(
         self, identity: dict[str, str], status: str
@@ -39,6 +51,15 @@ class ExtendedClient(Protocol):
     def stream(
         self, capability: str, payload: dict[str, Any]
     ) -> Iterator[SseEvent]: ...
+
+    def forward(
+        self,
+        method: str,
+        route: str,
+        *,
+        query: str = "",
+        payload: dict[str, Any],
+    ) -> ForwardedJson | ForwardedStream: ...
 
 
 class ExtendedHttpClient:
@@ -56,13 +77,14 @@ class ExtendedHttpClient:
     def domain_list(self) -> dict[str, Any]:
         return self._json("GET", "/domain/list", None)
 
+    def capability_list(self) -> dict[str, Any]:
+        return self._json("GET", "/capability/list", None)
+
     def session_list(
         self, identity: dict[str, str], status: str
     ) -> dict[str, Any]:
         return self._json(
-            "POST",
-            "/session/list",
-            {"identity": identity, "status": status},
+            "POST", "/session/list", {"identity": identity, "status": status}
         )
 
     def session_new(
@@ -79,11 +101,14 @@ class ExtendedHttpClient:
     def stream(
         self, capability: str, payload: dict[str, Any]
     ) -> Iterator[SseEvent]:
-        connection, response = self._open("POST", _route(capability), payload)
+        connection, response = self._open(
+            "POST", _route(capability), json.dumps(payload).encode("utf-8"),
+            "application/json"
+        )
         try:
             _raise_for_status(response)
-            content_type = response.headers.get("Content-Type", "")
-            if "text/event-stream" not in content_type:
+            response_content_type = response.headers.get("Content-Type", "")
+            if "text/event-stream" not in response_content_type:
                 raise ExtendedResponseError(
                     f"{capability} no devolvio text/event-stream"
                 )
@@ -92,17 +117,10 @@ class ExtendedHttpClient:
             raise
 
         def events() -> Iterator[SseEvent]:
-            block: list[str] = []
             try:
-                for raw_line in response:
-                    line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
-                    if line:
-                        block.append(line)
-                    elif block:
-                        yield _parse_sse(block)
-                        block = []
-                if block:
-                    yield _parse_sse(block)
+                for raw in _raw_sse_events(response):
+                    lines = raw.decode("utf-8", errors="replace").splitlines()
+                    yield _parse_sse(lines)
             except (OSError, TimeoutError, HTTPException) as exc:
                 raise ExtendedConnectionError(
                     f"se interrumpio el flujo de extended: {exc}"
@@ -112,13 +130,68 @@ class ExtendedHttpClient:
 
         return events()
 
+    def forward(
+        self,
+        method: str,
+        route: str,
+        *,
+        query: str = "",
+        payload: dict[str, Any],
+    ) -> ForwardedJson | ForwardedStream:
+        target = route + (f"?{query}" if query else "")
+        body = json.dumps(payload).encode("utf-8")
+        request_content_type = "application/json"
+        connection, response = self._open(
+            method, target, body, request_content_type
+        )
+        response_content_type = response.headers.get("Content-Type", "")
+        if "text/event-stream" in response_content_type:
+            def stream() -> Iterator[bytes]:
+                try:
+                    yield from _raw_sse_events(response)
+                except (OSError, TimeoutError, HTTPException) as exc:
+                    raise ExtendedConnectionError(
+                        f"se interrumpio el flujo de extended: {exc}"
+                    ) from exc
+                finally:
+                    connection.close()
+
+            return ForwardedStream(
+                body=stream(),
+                status_code=response.status,
+                content_type=response_content_type,
+            )
+        try:
+            raw = response.read()
+        except (OSError, TimeoutError, HTTPException) as exc:
+            raise ExtendedConnectionError(
+                f"no se pudo leer la respuesta de extended: {exc}"
+            ) from exc
+        finally:
+            connection.close()
+        try:
+            value = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ExtendedResponseError("extended no devolvio JSON valido") from exc
+        return ForwardedJson(
+            payload=value,
+            status_code=response.status,
+            content_type=response_content_type or None,
+        )
+
     def _json(
         self,
         method: str,
         route: str,
         payload: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        connection, response = self._open(method, route, payload)
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        connection, response = self._open(
+            method,
+            route,
+            body,
+            "application/json" if body is not None else None,
+        )
         try:
             _raise_for_status(response)
             raw = response.read()
@@ -140,23 +213,21 @@ class ExtendedHttpClient:
         self,
         method: str,
         route: str,
-        payload: dict[str, Any] | None,
+        body: bytes | None,
+        content_type: str | None,
     ):
         parts = urlsplit(self._base_url)
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise ExtendedConnectionError("extended.base_url no es una URL HTTP valida")
         factory = HTTPSConnection if parts.scheme == "https" else HTTPConnection
         connection = factory(
-            parts.hostname,
-            parts.port,
-            timeout=self._connect_timeout,
+            parts.hostname, parts.port, timeout=self._connect_timeout
         )
         base_path = parts.path.rstrip("/")
         target = f"{base_path}{route}" or "/"
-        body = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = {"Accept": "application/json, text/event-stream"}
-        if body is not None:
-            headers["Content-Type"] = "application/json"
+        if body is not None and content_type:
+            headers["Content-Type"] = content_type
         try:
             connection.request(method, target, body=body, headers=headers)
             if connection.sock is not None:
@@ -194,6 +265,19 @@ def _raise_for_status(response) -> None:
     raise ExtendedResponseError(
         f"extended devolvio HTTP {response.status}: {detail}"
     )
+
+
+def _raw_sse_events(response) -> Iterator[bytes]:
+    block: list[bytes] = []
+    for raw_line in response:
+        line = raw_line.rstrip(b"\r\n")
+        if line:
+            block.append(line)
+        elif block:
+            yield b"\n".join(block) + b"\n\n"
+            block = []
+    if block:
+        yield b"\n".join(block) + b"\n\n"
 
 
 def _parse_sse(lines: list[str]) -> SseEvent:

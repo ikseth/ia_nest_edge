@@ -4,12 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ianest-edge"
-version = "0.1.1"
-description = "Borde autenticador y piel OpenAI de IA_NEST"
+version = "0.2.0"
+description = "Borde autenticador REST, MCP y OpenAI de IA_NEST"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "PyYAML>=6,<7",
+    "ldap3>=2.9,<3",
+    "mcp>=2.3,<3",
     "starlette>=1.0,<2",
     "uvicorn>=0.31,<1",
 ]

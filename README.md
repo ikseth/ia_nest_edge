@@ -3,82 +3,84 @@
 El borde del ente IA_NEST: la unica puerta por la que se le habla.
 
 Estado: activo
-Version: 0.2 - 2026-10-22
+Version: 0.2 - 2026-10-28
 
 ## Que es
 
-Autentica a cada consumidor y afirma su identidad hacia dentro; las capas
-interiores la consumen como hasta ahora (meta ADR 0011). Traduce cada
-conversacion de un consumidor a una sesion de `ia_nest_extended`
-(`extended ADR 0014` y `0015`).
+Autentica una vez contra el directorio y afirma la identidad hacia dentro
+(meta ADR 0011, edge ADR 0003). Las capas interiores no reautentican. El borde
+no infiere, no recuerda, no delibera ni presenta (`core ADR 0033`).
 
-Zona **Exterior** del registro (meta ADR 0013): no infiere, no recuerda, no
-delibera ni presenta. Decide quien habla con el ente y en nombre de quien.
+Ofrece tres caras sobre una sola REST de extended en loopback:
 
-Dos caras, ambas dentro del contrato uniforme (meta ADR 0007):
+- `/v1/models` y `/v1/chat/completions`: piel OpenAI para clientes de chat.
+- `/rest/{ruta}`: reenvio generico del contrato uniforme de extended.
+- `/mcp`: MCP Streamable HTTP; herramientas derivadas de `capability.list`.
 
-- **Reenvio del contrato de extended** (REST y MCP), con autenticacion. Para
-  los agentes (`ia_nest_agents`).
-- **Piel en el dialecto OpenAI** (`/v1/chat/completions`, `/v1/models`). Para
-  Home Assistant, el recomendador de Kodi y el webchat (Open WebUI).
+REST y MCP pasan solo las capacidades de `api.allowed_capabilities`. La lista
+autoriza; no replica el catalogo. Una capacidad nueva con proyecciones REST y
+MCP se expone anadiendo su nombre a la lista, sin editar codigo (meta ADR 0007).
 
-Todo interno: el borde se publica solo en la red de casa, y es lo unico que se
-publica. Nada expuesto a Internet.
+## Identidad y fallo cerrado
 
-## Criterio de salida
+La credencial es `Authorization: Bearer <uid>.<secreto>`. El directorio guarda
+el hash SHA-256 del secreto en `edge-key-sha256` (atributo configurable), los
+grupos de servicio, perfil, clase y prototipos. La configuracion no contiene
+cuentas, personas, claves ni hashes.
 
-Fijado en meta ADR 0013, antes que el mecanismo:
+Cada peticion consulta el directorio por LDAPS, con verificacion contra
+`directory.ca_file`. No hay cache ni fuente alternativa. Si el directorio no
+responde, las tres caras devuelven 503; el proceso sigue vivo y la siguiente
+peticion vuelve a intentarlo.
 
-1. Home Assistant, Kodi y Open WebUI responden a traves del borde cambiando solo
-   su configuracion (URL y credencial).
-2. Desde otra maquina de la red no responde ninguna superficie del core ni de
-   extended.
-3. **Duro.** Ninguna peticion con perfil infantil sale del borde sin el perfil
-   aplicado; perfil desconocido = infantil.
-4. Una conversacion = una sesion de extended, estable entre turnos y nunca
-   compartida.
+Una cuenta de `edge_asserts_people` debe aportar la cabecera de persona de su
+clase. La persona se busca por `mail` y debe estar en `ia_nest_users`. No hay
+invitado. El perfil es `adult` solo si el sujeto esta en `profile_adult` y no
+esta en `profile_child`; cualquier otro caso es `child`.
 
-## Estado
+## Configuracion
 
-Primera version con contrato publico: `v0.1.0` (`CHANGELOG.md`). Que cuenta
-como contrato, en `docs/VERSIONADO.md`; de que depende, en
-`docs/DEPENDENCIAS.md`. Diseno en `docs/decision_records/0002-*`.
+La forma completa esta en `config/edge.example.yaml`:
+
+- `server`, `extended` y `audit`: escucha, REST interior y auditoria.
+- `directory`: LDAPS, DN de lectura, CA, fichero de contrasena y nombres de
+  grupos.
+- `classes`: cabeceras, `write_memory` y menus `adult`/`child`.
+- `api.allowed_capabilities`: autorizacion exacta para REST y MCP.
+
+El menu se elige por clase y perfil. Las entradas `prototype: true` solo se
+publican a sujetos de `edge_prototypes`. Los dominios fijos se validan contra
+`domain.list` al arrancar. El arranque no consulta el directorio.
+
+`ianest-edge-key --help` explica la credencial y `ianest-edge-key` genera el
+secreto y su hash. La contrasena de bind se lee de
+`directory.bind_password_file` al arrancar y nunca se versiona.
 
 ## Instalacion
 
 El instalador deja la configuracion efectiva en
 `/opt/ia_nest/config/edge/<instancia>/edge.yaml` y el estado, incluido el venv,
-en `/opt/ia_nest/state/edge/<instancia>/`. No crea claves, certificados ni el
-servicio extended.
+en `/opt/ia_nest/state/edge/<instancia>/`. Comprueba que el usuario del servicio
+puede leer la CA y el fichero de contrasena del directorio.
 
-Requisitos: Bash, curl, Python >= 3.13,<3.14 y PyYAML en ese Python, porque el
-instalador valida `edge.yaml` antes de crear el venv. Instalar PyYAML con
-`zypper install python313-PyYAML` en openSUSE o `apt install python3-yaml` en
-Debian.
-
-En una maquina limpia, primero crear un entorno temporal para generar cada
-clave de consumidor y conservar solo su hash en `edge.yaml`:
-
-```bash
-python3 -m venv /tmp/ianest-edge-key
-/tmp/ianest-edge-key/bin/pip install .
-/tmp/ianest-edge-key/bin/ianest-edge key
-```
-
-Copiar `config/edge.example.yaml` fuera del repositorio, completar los hashes y
-ajustar `audit.path` dentro del estado de la instancia, por ejemplo
-`/opt/ia_nest/state/edge/family/audit/edge.jsonl`. Preparar tambien
-`deploy/ejemplo.setup.conf` fuera del repositorio con la ruta de ese `edge.yaml`
-y lanzar:
+Requisitos: Bash, curl, Python >=3.13,<3.14 y PyYAML en ese Python, porque el
+instalador valida `edge.yaml` antes de crear el venv. Copiar el ejemplo fuera
+del repo, ajustar rutas y lanzar:
 
 ```bash
 deploy/setup.sh --config /ruta/privada/edge.setup.conf
 ```
 
-Los overrides de linea de comandos tienen precedencia sobre el fichero, que la
-tiene sobre los valores por defecto. `--print-config` muestra la configuracion
-efectiva sin instalar; una configuracion ya desplegada se conserva salvo
-`REPLACE_CONFIG=true`.
+Los overrides de linea de comandos tienen precedencia sobre el fichero, y el
+fichero sobre los valores por defecto. `VERIFY=strict` comprueba que
+`/v1/models` sin credencial devuelve 401; esa sonda no necesita directorio.
+
+## Criterio de salida
+
+El criterio de `H05` no se redefine aqui: vive en
+`ia_nest_meta/docs/plan/hitos/H05_borde_contra_el_directorio.md`, desde meta
+ADR 0015 (C1, C2, C4 y C5). El detalle implementado se decide en edge ADR 0003
+y se registra en `docs/PLAN.md`.
 
 ## Orden de lectura
 

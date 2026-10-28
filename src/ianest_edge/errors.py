@@ -40,6 +40,18 @@ class AuthenticationError(EdgeError):
     status_code = 401
 
 
+class AuthorizationError(EdgeError):
+    status_code = 403
+
+
+class CapabilityNotAllowedError(AuthorizationError):
+    pass
+
+
+class DirectoryUnavailableError(EdgeError):
+    status_code = 503
+
+
 class RequestValidationError(EdgeError):
     pass
 
