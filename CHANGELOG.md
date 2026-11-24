@@ -5,6 +5,8 @@ Sin acentos por convencion.
 
 ## [No publicado]
 
+## [v0.3.0] - 2026-11-24
+
 ### Anadido
 - Hechos de saludo `frame_facts` (cuenta, persona y dispositivo), tono
   `audience`, cabecera de dispositivo por clase y `person_required` (edge ADR
