@@ -12,7 +12,9 @@ from ianest_edge.rest import create_app
 from .conftest import BEARER, KEY
 
 
-def _mcp_requests(app, payloads, *, authorization=BEARER, person="adult@test"):
+def _mcp_requests(
+    app, payloads, *, authorization=BEARER, person="adult@test", device=None
+):
     async def run():
         async with app.router.lifespan_context(app):
             transport = httpx.ASGITransport(app=app)
@@ -26,6 +28,8 @@ def _mcp_requests(app, payloads, *, authorization=BEARER, person="adult@test"):
                 }
                 if person is not None:
                     headers["X-Person"] = person
+                if device is not None:
+                    headers["X-Device"] = device
                 return [
                     await client.post("/mcp", headers=headers, json=payload)
                     for payload in payloads
@@ -87,6 +91,16 @@ def test_mcp_requires_bearer_before_protocol(service, extended):
     assert not any(call[0] == "capability.list" for call in extended.calls)
 
 
+def test_invalid_device_is_400_and_audited_on_mcp(service, extended, config):
+    app = create_app(service.config, service)
+    response = _mcp_requests(
+        app, [_request(1, "tools/list", {})], device="has/slash"
+    )[0]
+    assert response.status_code == 400
+    assert not any(call[0] == "capability.list" for call in extended.calls)
+    assert _audit(config)[-1]["outcome"] == "error"
+
+
 @pytest.mark.parametrize("path", ["/mcp/", "/anything"])
 def test_all_mcp_mount_paths_require_authentication(service, directory, path):
     app = create_app(service.config, service)
@@ -142,6 +156,12 @@ def test_tools_call_uses_rest_projection_and_forwards_session(
         "service": "open_webui",
         "interlocutor_profile": "adult",
         "session_id": "s1",
+        "audience": "adult",
+        "frame_facts": {
+            "account": {"value": "chat_service", "origin": "authenticated"},
+            "person": {"value": "adult_user", "origin": "validated"},
+            "device": {"value": None, "origin": "absent"},
+        },
     }
     record = _audit(config)[-1]
     assert record["face"] == "mcp"

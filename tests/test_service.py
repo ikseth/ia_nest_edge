@@ -51,6 +51,12 @@ def test_valid_openai_request_forwards_directory_identity(service, extended):
     assert call[1]["identity"]["user_id"] == "adult_user"
     assert call[1]["identity"]["service"] == "open_webui"
     assert call[1]["identity"]["interlocutor_profile"] == "adult"
+    assert call[1]["identity"]["audience"] == "adult"
+    assert call[1]["identity"]["frame_facts"] == {
+        "account": {"value": "chat_service", "origin": "authenticated"},
+        "person": {"value": "adult_user", "origin": "validated"},
+        "device": {"value": None, "origin": "absent"},
+    }
 
 
 def test_only_last_user_message_reaches_extended_and_system_is_audited(
@@ -160,7 +166,7 @@ def test_non_stream_downstream_error_is_not_retyped(service, extended):
     assert exc_info.value.error == expected
 
 
-def test_audit_never_contains_message_or_key(service, config):
+def test_audit_records_identity_facts_without_message_or_key(service, config):
     secret_message = "MESSAGE-MUST-NOT-LEAK"
     service.chat(
         _identity(service),
@@ -171,4 +177,8 @@ def test_audit_never_contains_message_or_key(service, config):
     raw = config.audit_path.read_text(encoding="ascii")
     assert secret_message not in raw
     assert BEARER not in raw
-    assert _audit(config)[-1]["face"] == "openai"
+    record = _audit(config)[-1]
+    assert record["face"] == "openai"
+    assert record["person"] == "adult_user"
+    assert record["device"] is None
+    assert record["audience"] == "adult"

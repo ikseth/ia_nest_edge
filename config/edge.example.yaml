@@ -42,6 +42,8 @@ classes:
       chat: "X-OpenWebUI-Chat-Id"
       person: "X-OpenWebUI-User-Email"
       background_task: "X-OpenWebUI-Task"
+    # Sin dispositivo: Open WebUI no lo tiene. Persona obligatoria (por defecto).
+    person_required: true
     write_memory: true
     menus:
       adult:
@@ -56,14 +58,37 @@ classes:
           mode: "iterativo"
           domain: "auto"
           prototype: true
-      child:
+      restricted:
         - id: "conversacion"
+          mode: "directo"
+          domain: "auto"
+          default: true
+
+  # Consumidor con dispositivo y persona opcional (por ejemplo, un asistente de voz
+  # con satelites): sin persona habla la cuenta, con nivel restricted y tono general.
+  # El dispositivo solo se valida en forma; su espacio de nombres es la cuenta.
+  voz:
+    headers:
+      chat: "X-IANest-Conversation-Id"
+      person: "X-IANest-Person"
+      device: "X-IANest-Device"
+    person_required: false
+    write_memory: true
+    menus:
+      adult:
+        - id: "casa"
+          mode: "directo"
+          domain: "auto"
+          default: true
+      restricted:
+        - id: "casa"
           mode: "directo"
           domain: "auto"
           default: true
 
   api:
     headers: {}
+    person_required: true
     write_memory: true
     menus:
       adult:
@@ -71,7 +96,7 @@ classes:
           mode: "directo"
           domain: "auto"
           default: true
-      child:
+      restricted:
         - id: "conversacion"
           mode: "directo"
           domain: "auto"

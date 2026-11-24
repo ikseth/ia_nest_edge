@@ -76,6 +76,25 @@ def test_openai_models_and_completion(service):
     assert [response.status_code for response in responses] == [200, 200]
 
 
+@pytest.mark.parametrize("device", ["x" * 129, "has space", "has/slash"])
+def test_invalid_device_is_400_and_audited_on_openai_and_rest(
+    service, extended, config, device
+):
+    app = create_app(service.config, service)
+    headers = {**_headers(), "X-Device": device}
+
+    async def openai(client):
+        return await client.get("/v1/models", headers=headers)
+
+    async def rest(client):
+        return await client.post("/rest/prompt/run", headers=headers, json={})
+
+    responses = _requests(app, [openai, rest])
+    assert [response.status_code for response in responses] == [400, 400]
+    assert not any(call[0] in {"prompt.run", "forward"} for call in extended.calls)
+    assert [record["outcome"] for record in _audit(config)[-2:]] == ["error", "error"]
+
+
 def test_non_asserting_account_identity_reaches_openai_and_rest(service, extended):
     app = create_app(service.config, service)
 
@@ -128,12 +147,7 @@ def test_rest_forwards_session_and_overrides_other_identity_fields(
     assert response.status_code == 200
     call = next(item for item in extended.calls if item[0] == "forward")
     assert call[1:4] == ("POST", "/prompt/run", "dry=true")
-    assert call[4]["identity"] == {
-        "user_id": "adult_user",
-        "service": "open_webui",
-        "interlocutor_profile": "adult",
-        "session_id": "s1",
-    }
+    assert call[4]["identity"] == _edge_identity(session_id="s1")
     record = _audit(config)[-1]
     assert record["identity_overridden"] is True
     assert record["face"] == "rest"
@@ -154,12 +168,7 @@ def test_rest_forwards_only_client_session_without_identity_override(
     response = _requests(app, [request])[0]
     assert response.status_code == 200
     call = next(item for item in extended.calls if item[0] == "forward")
-    assert call[4]["identity"] == {
-        "user_id": "adult_user",
-        "service": "open_webui",
-        "interlocutor_profile": "adult",
-        "session_id": "s1",
-    }
+    assert call[4]["identity"] == _edge_identity(session_id="s1")
     assert _audit(config)[-1]["identity_overridden"] is False
 
 
@@ -218,13 +227,48 @@ def test_rest_always_forwards_edge_identity_in_json(
     assert response.status_code == status
     forwards = [call for call in extended.calls if call[0] == "forward"]
     if status == 200:
-        assert forwards[0][4]["identity"] == {
-            "user_id": "adult_user",
-            "service": "open_webui",
-            "interlocutor_profile": "adult",
-        }
+        assert forwards[0][4]["identity"] == _edge_identity()
     else:
         assert forwards == []
+
+
+def test_rest_overrides_client_frame_facts_and_audience(service, extended, config):
+    app = create_app(service.config, service)
+
+    async def request(client):
+        return await client.post(
+            "/rest/prompt/run",
+            headers=_headers(),
+            json={
+                "identity": {
+                    "session_id": "s1",
+                    "audience": "adult",
+                    "frame_facts": {"account": {"value": "attacker"}},
+                }
+            },
+        )
+
+    assert _requests(app, [request])[0].status_code == 200
+    call = next(item for item in extended.calls if item[0] == "forward")
+    assert call[4]["identity"] == _edge_identity(session_id="s1")
+    assert _audit(config)[-1]["identity_overridden"] is True
+
+
+def _edge_identity(*, session_id=None):
+    identity = {
+        "user_id": "adult_user",
+        "service": "open_webui",
+        "interlocutor_profile": "adult",
+        "audience": "adult",
+        "frame_facts": {
+            "account": {"value": "chat_service", "origin": "authenticated"},
+            "person": {"value": "adult_user", "origin": "validated"},
+            "device": {"value": None, "origin": "absent"},
+        },
+    }
+    if session_id is not None:
+        identity["session_id"] = session_id
+    return identity
 
 
 def test_rest_disallowed_capability_is_403_without_extended_call(

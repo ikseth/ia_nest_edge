@@ -18,9 +18,11 @@ from .errors import (
     AuthorizationError,
     ConfigurationError,
     DirectoryUnavailableError,
+    RequestValidationError,
 )
 
 UID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
+DEVICE_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +57,9 @@ class ResolvedIdentity:
     user_id: str
     service: str
     interlocutor_profile: str
+    person: str | None
+    device: str | None
+    audience: str
     menu: tuple[MenuEntry, ...]
 
     @property
@@ -240,33 +245,53 @@ class DirectoryIdentityResolver:
         groups_config = self._config.directory.groups
         subject_uid = consumer.uid
         subject_groups = consumer.groups
+        person_uid = None
+        device = _device(_header(headers, consumer.consumer_class.headers.device))
         if groups_config.asserts_people in consumer.groups:
             person = _header(headers, consumer.consumer_class.headers.person)
             if not person:
-                raise AuthorizationError(
-                    "la cabecera de persona es obligatoria para esta cuenta"
+                if consumer.consumer_class.person_required:
+                    raise AuthorizationError(
+                        "la cabecera de persona es obligatoria para esta cuenta"
+                    )
+            else:
+                entries = self._directory.find(
+                    "mail",
+                    person,
+                    key_attribute=self._config.directory.key_attribute,
                 )
-            entries = self._directory.find(
-                "mail",
-                person,
-                key_attribute=self._config.directory.key_attribute,
-            )
-            if len(entries) != 1:
-                raise AuthorizationError(
-                    "la persona afirmada no existe de forma unica"
-                )
-            selected = entries[0]
-            if not selected.uid or groups_config.users not in selected.groups:
-                raise AuthorizationError(
-                    "la persona afirmada no pertenece al grupo de usuarios"
-                )
-            subject_uid = selected.uid
-            subject_groups = selected.groups
+                if len(entries) != 1:
+                    raise AuthorizationError(
+                        "la persona afirmada no existe de forma unica"
+                    )
+                selected = entries[0]
+                if not selected.uid or groups_config.users not in selected.groups:
+                    raise AuthorizationError(
+                        "la persona afirmada no pertenece al grupo de usuarios"
+                    )
+                subject_uid = selected.uid
+                subject_groups = selected.groups
+                person_uid = selected.uid
         profile = (
             "adult"
             if groups_config.adult in subject_groups
             and groups_config.child not in subject_groups
-            else "child"
+            else "restricted"
+        )
+        if person_uid is None:
+            profile = (
+                "restricted"
+                if groups_config.asserts_people in consumer.groups
+                else profile
+            )
+        audience = (
+            "child"
+            if person_uid is not None and groups_config.child in subject_groups
+            else "adult"
+            if person_uid is not None
+            and groups_config.adult in subject_groups
+            and groups_config.child not in subject_groups
+            else "general"
         )
         menu = consumer.consumer_class.menu_for(
             profile,
@@ -278,6 +303,9 @@ class DirectoryIdentityResolver:
             user_id=subject_uid,
             service=consumer.consumer_class.name,
             interlocutor_profile=profile,
+            person=person_uid,
+            device=device,
+            audience=audience,
             menu=menu,
         )
 
@@ -350,3 +378,14 @@ def _header(headers: Mapping[str, str], name: str | None) -> str | None:
             stripped = value.strip()
             return stripped or None
     return None
+
+
+def _device(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not DEVICE_PATTERN.fullmatch(value):
+        raise RequestValidationError(
+            "la cabecera de dispositivo debe tener de 1 a 128 caracteres seguros",
+            "device",
+        )
+    return value

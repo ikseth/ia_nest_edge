@@ -10,6 +10,7 @@ from ianest_edge.errors import (
     AuthorizationError,
     ConfigurationError,
     DirectoryUnavailableError,
+    RequestValidationError,
 )
 from ianest_edge.identity import (
     DirectoryEntry,
@@ -69,9 +70,9 @@ def test_wrong_secret_is_401(config, directory):
     ("mail", "profile"),
     [
         ("adult@test", "adult"),
-        ("child@test", "child"),
-        ("both@test", "child"),
-        ("unknown@test", "child"),
+        ("child@test", "restricted"),
+        ("both@test", "restricted"),
+        ("unknown@test", "restricted"),
     ],
 )
 def test_person_profile_fails_closed(config, directory, mail, profile):
@@ -79,6 +80,28 @@ def test_person_profile_fails_closed(config, directory, mail, profile):
     account = resolver.authenticate(BEARER)
     identity = resolver.resolve(account, {"X-Person": mail})
     assert identity.interlocutor_profile == profile
+
+
+@pytest.mark.parametrize(
+    ("mail", "profile", "audience"),
+    [
+        ("adult@test", "adult", "adult"),
+        ("child@test", "restricted", "child"),
+        ("both@test", "restricted", "child"),
+        ("unknown@test", "restricted", "general"),
+    ],
+)
+def test_validated_person_has_frame_facts_and_separate_audience(
+    config, directory, mail, profile, audience
+):
+    resolver = DirectoryIdentityResolver(config, directory)
+    identity = resolver.resolve(
+        resolver.authenticate(BEARER), {"X-Person": mail, "X-Device": "kitchen-1"}
+    )
+    assert identity.interlocutor_profile == profile
+    assert identity.audience == audience
+    assert identity.person == identity.user_id
+    assert identity.device == "kitchen-1"
 
 
 @pytest.mark.parametrize("headers", [{}, {"X-Person": "missing@test"}, {"X-Person": "outside@test"}])
@@ -132,6 +155,66 @@ def test_account_without_person_assertion_uses_its_own_identity(config, director
     assert identity.user_id == "api_service"
     assert identity.service == "api"
     assert identity.interlocutor_profile == "adult"
+    assert identity.person is None
+    assert identity.audience == "general"
+
+
+def test_optional_person_asserting_account_uses_restricted_fallback(
+    tmp_path, directory
+):
+    raw = config_dict(tmp_path)
+    raw["classes"]["open_webui"]["person_required"] = False
+    config = EdgeConfig.from_dict(raw)
+    resolver = DirectoryIdentityResolver(config, directory)
+    identity = resolver.resolve(resolver.authenticate(BEARER), {})
+    assert identity.user_id == UID
+    assert identity.person is None
+    assert identity.interlocutor_profile == "restricted"
+    assert identity.audience == "general"
+    with pytest.raises(AuthorizationError):
+        resolver.resolve(
+            resolver.authenticate(BEARER), {"X-Person": "missing@test"}
+        )
+
+
+@pytest.mark.parametrize("device", ["x" * 129, "has space", "has/slash"])
+def test_invalid_device_is_request_validation_error(config, directory, device):
+    resolver = DirectoryIdentityResolver(config, directory)
+    with pytest.raises(RequestValidationError):
+        resolver.resolve(
+            resolver.authenticate(BEARER),
+            {"X-Person": "adult@test", "X-Device": device},
+        )
+
+
+def test_same_device_for_two_accounts_keeps_each_authenticated_account(
+    tmp_path, directory
+):
+    raw = config_dict(tmp_path)
+    raw["classes"]["api"]["headers"] = {"device": "X-Device"}
+    config = EdgeConfig.from_dict(raw)
+    resolver = DirectoryIdentityResolver(config, directory)
+    asserted = {"X-Device": "living-room"}
+    person_identity = resolver.resolve(
+        resolver.authenticate(BEARER), {"X-Person": "adult@test", **asserted}
+    )
+    account_identity = resolver.resolve(
+        resolver.authenticate(f"Bearer api_service.{KEY}"), asserted
+    )
+    assert person_identity.device == account_identity.device == "living-room"
+    assert person_identity.consumer == UID
+    assert account_identity.consumer == "api_service"
+
+
+def test_menu_child_alias_is_accepted_but_cannot_mix_with_restricted(tmp_path):
+    raw = config_dict(tmp_path)
+    menus = raw["classes"]["api"]["menus"]
+    menus["child"] = menus.pop("restricted")
+    assert "restricted" in EdgeConfig.from_dict(raw).classes["api"].menus
+    raw = config_dict(tmp_path)
+    raw["classes"]["api"]["menus"]["child"] = []
+    with pytest.raises(ConfigurationError, match="child y restricted"):
+        EdgeConfig.from_dict(raw)
 
 
 def test_directory_unavailable_is_typed_and_recovers(config, directory):

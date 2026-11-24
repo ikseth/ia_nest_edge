@@ -29,6 +29,15 @@ identidad afirmada por el borde y lista de capacidades permitidas. MCP deriva
 sus herramientas del catalogo vivo; el reenvio REST no contiene casos por
 capacidad. La piel OpenAI conserva su traduccion y usa la misma identidad.
 
+## Hechos del saludo y permiso (hecho, pendiente de despliegue coordinado)
+
+Edge ADR 0004 anade la cabecera de dispositivo por clase, `frame_facts` y
+`audience` a la identidad interior. El permiso emitido es `adult` o
+`restricted`; una persona puede ser opcional por clase sin aceptar una persona
+no validada. Menus y validacion usan `restricted`, con `child` aceptado solo
+como alias temporal de configuracion. El despliegue espera a que extended y
+core acepten los campos y el valor nuevos.
+
 ## Lo que sigue, por hito de meta
 
 | Que | Hito |

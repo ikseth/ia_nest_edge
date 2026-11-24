@@ -34,9 +34,17 @@ responde, las tres caras devuelven 503; el proceso sigue vivo y la siguiente
 peticion vuelve a intentarlo.
 
 Una cuenta de `edge_asserts_people` debe aportar la cabecera de persona de su
-clase. La persona se busca por `mail` y debe estar en `ia_nest_users`. No hay
-invitado. El perfil es `adult` solo si el sujeto esta en `profile_adult` y no
-esta en `profile_child`; cualquier otro caso es `child`.
+clase salvo que esta declare `person_required: false`; entonces, si falta,
+habla la cuenta con permiso `restricted`. La persona se busca por `mail` y debe
+estar en `ia_nest_users`. No hay invitado. El permiso es `adult` solo si el
+sujeto esta en `profile_adult` y no esta en `profile_child`; cualquier otro
+caso es `restricted` (edge ADR 0004).
+
+La identidad hacia extended incluye `frame_facts` para cuenta autenticada,
+persona validada o ausente, y dispositivo afirmado o ausente, y separa el tono
+en `audience` (`child`, `adult` o `general`). El dispositivo solo se toma de la
+cabecera `headers.device` de la clase y debe usar de 1 a 128 caracteres de
+`[A-Za-z0-9._:-]`.
 
 ## Configuracion
 
@@ -45,7 +53,8 @@ La forma completa esta en `config/edge.example.yaml`:
 - `server`, `extended` y `audit`: escucha, REST interior y auditoria.
 - `directory`: LDAPS, DN de lectura, CA, fichero de contrasena y nombres de
   grupos.
-- `classes`: cabeceras, `write_memory` y menus `adult`/`child`.
+- `classes`: cabeceras, `person_required`, `write_memory` y menus
+  `adult`/`restricted` (`child` se acepta temporalmente como alias).
 - `api.allowed_capabilities`: autorizacion exacta para REST y MCP.
 
 El menu se elige por clase y perfil. Las entradas `prototype: true` solo se

@@ -14,7 +14,7 @@ from uuid import uuid4
 from .audit import AuditRecord, AuditWriter
 from .client import ExtendedClient, ExtendedHttpClient, SseEvent
 from .client import ForwardedJson, ForwardedStream
-from .config import EdgeConfig, MenuEntry, PROFILE_CHILD
+from .config import EdgeConfig, MenuEntry, PROFILE_RESTRICTED
 from .errors import (
     CapabilityNotAllowedError,
     ConfigurationError,
@@ -43,6 +43,9 @@ class _AuditState:
     consumer: str | None = None
     user_id: str | None = None
     profile: str | None = None
+    person: str | None = None
+    device: str | None = None
+    audience: str | None = None
     menu_entry: str | None = None
     mode: str | None = None
     capability: str | None = None
@@ -89,14 +92,14 @@ class EdgeService:
                 "domain.list contiene una entrada sin id", "extended.base_url"
             )
         for field, profile, menu in self._configured_menus():
-            if profile == PROFILE_CHILD:
+            if profile == PROFILE_RESTRICTED:
                 invalid = next(
                     (entry for entry in menu if entry.mode != "directo"),
                     None,
                 )
                 if invalid is not None:
                     raise ConfigurationError(
-                        "una identidad child solo puede usar modo directo",
+                        "una identidad restricted solo puede usar modo directo",
                         f"{field}.menu.{invalid.id}.mode",
                     )
             for entry in menu:
@@ -233,7 +236,7 @@ class EdgeService:
         self,
         identity: ResolvedIdentity,
         headers: Mapping[str, str],
-        base_identity: dict[str, str],
+        base_identity: dict[str, Any],
         messages: list[dict[str, str]],
     ) -> str:
         chat_id = _header_value(headers, identity.consumer_class.headers.chat)
@@ -479,6 +482,9 @@ class EdgeService:
                 consumer=state.consumer,
                 user_id=state.user_id,
                 interlocutor_profile=state.profile,
+                person=state.person,
+                device=state.device,
+                audience=state.audience,
                 menu_entry=state.menu_entry,
                 mode=state.mode,
                 capability=state.capability,
@@ -499,6 +505,9 @@ def _state_for(identity: ResolvedIdentity, *, face: str = "openai") -> _AuditSta
         consumer=identity.consumer,
         user_id=identity.user_id,
         profile=identity.interlocutor_profile,
+        person=identity.person,
+        device=identity.device,
+        audience=identity.audience,
     )
 
 
@@ -591,11 +600,23 @@ def _capability(entry: MenuEntry, stream: bool) -> str:
     return "task.run"
 
 
-def _identity_payload(identity: ResolvedIdentity) -> dict[str, str]:
+def _identity_payload(identity: ResolvedIdentity) -> dict[str, Any]:
     return {
         "user_id": identity.user_id,
         "service": identity.service,
         INTERLOCUTOR_PROFILE_FIELD: identity.interlocutor_profile,
+        "audience": identity.audience,
+        "frame_facts": {
+            "account": {"value": identity.consumer, "origin": "authenticated"},
+            "person": {
+                "value": identity.person,
+                "origin": "validated" if identity.person is not None else "absent",
+            },
+            "device": {
+                "value": identity.device,
+                "origin": "asserted" if identity.device is not None else "absent",
+            },
+        },
     }
 
 
