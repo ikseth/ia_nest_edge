@@ -16,7 +16,7 @@ from .errors import ConfigurationError
 CONFIG_ENV = "IANEST_EDGE_CONFIG"
 DEFAULT_CONFIG_PATH = "config/edge.yaml"
 PROFILE_ADULT = "adult"
-PROFILE_CHILD = "child"
+PROFILE_RESTRICTED = "restricted"
 VALID_MODES = frozenset({"directo", "razonado", "iterativo"})
 FORBIDDEN_LEGACY_KEYS = frozenset({"consumers", "people", "key_sha256", "guest"})
 IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -35,6 +35,7 @@ class MenuEntry:
 class HeaderConfig:
     chat: str | None = None
     person: str | None = None
+    device: str | None = None
     background_task: str | None = None
 
 
@@ -50,6 +51,7 @@ class ClassConfig:
     write_memory: bool
     headers: HeaderConfig
     menus: dict[str, tuple[MenuEntry, ...]]
+    person_required: bool = True
 
     def menu_for(self, profile: str, *, prototypes: bool) -> tuple[MenuEntry, ...]:
         return tuple(
@@ -270,9 +272,19 @@ def _classes(raw: Any) -> dict[str, ClassConfig]:
         class_body = _mapping(raw_class, field)
         headers_raw = _mapping(class_body.get("headers", {}), f"{field}.headers")
         menus_raw = _mapping(class_body.get("menus"), f"{field}.menus")
+        if "restricted" in menus_raw and "child" in menus_raw:
+            raise ConfigurationError(
+                "menus no admite child y restricted a la vez",
+                f"{field}.menus",
+            )
+        restricted_raw = menus_raw.get("restricted", menus_raw.get("child"))
         menus = {
-            profile: _menu(menus_raw.get(profile), f"{field}.menus.{profile}")
-            for profile in (PROFILE_ADULT, PROFILE_CHILD)
+            PROFILE_ADULT: _menu(
+                menus_raw.get(PROFILE_ADULT), f"{field}.menus.{PROFILE_ADULT}"
+            ),
+            PROFILE_RESTRICTED: _menu(
+                restricted_raw, f"{field}.menus.{PROFILE_RESTRICTED}"
+            ),
         }
         result[name] = ClassConfig(
             name=name,
@@ -284,12 +296,19 @@ def _classes(raw: Any) -> dict[str, ClassConfig]:
                 person=_optional_text(
                     headers_raw.get("person"), f"{field}.headers.person"
                 ),
+                device=_optional_text(
+                    headers_raw.get("device"), f"{field}.headers.device"
+                ),
                 background_task=_optional_text(
                     headers_raw.get("background_task"),
                     f"{field}.headers.background_task",
                 ),
             ),
             menus=menus,
+            person_required=_boolean(
+                class_body.get("person_required", True),
+                f"{field}.person_required",
+            ),
         )
     return result
 

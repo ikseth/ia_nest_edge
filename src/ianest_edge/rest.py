@@ -198,6 +198,14 @@ class _McpAuthenticationMiddleware:
                 {"error": exc.to_dict()}, status_code=403
             )(scope, receive, send)
             return
+        except RequestValidationError as exc:
+            await run_sync(
+                self.service.audit_access_failure, "mcp", "error", started
+            )
+            await JSONResponse(
+                {"error": exc.to_dict()}, status_code=400
+            )(scope, receive, send)
+            return
         except DirectoryUnavailableError as exc:
             await run_sync(
                 self.service.audit_access_failure,
@@ -231,6 +239,9 @@ async def _authenticate(
         await run_sync(
             service.audit_access_failure, face, "forbidden", started
         )
+        raise
+    except RequestValidationError:
+        await run_sync(service.audit_access_failure, face, "error", started)
         raise
     except DirectoryUnavailableError:
         await run_sync(

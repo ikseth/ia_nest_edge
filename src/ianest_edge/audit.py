@@ -14,6 +14,9 @@ class AuditRecord:
     consumer: str | None
     user_id: str | None
     interlocutor_profile: str | None
+    person: str | None
+    device: str | None
+    audience: str | None
     menu_entry: str | None
     mode: str | None
     capability: str | None

@@ -5,6 +5,15 @@ Sin acentos por convencion.
 
 ## [No publicado]
 
+### Anadido
+- Hechos de saludo `frame_facts` (cuenta, persona y dispositivo), tono
+  `audience`, cabecera de dispositivo por clase y `person_required` (edge ADR
+  0004).
+
+### Cambiado
+- El nivel de permiso emitido pasa de `child` a `restricted`; los menus usan
+  `adult`/`restricted` y aceptan `child` temporalmente como alias.
+
 ## [0.2.1] - 2026-10-28
 
 ### Corregido

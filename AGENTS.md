@@ -25,9 +25,8 @@ solo su detalle interno.
 - **Contrato uniforme.** Lo de extended se reenvia con un mecanismo generico; la
   piel OpenAI es extension aditiva, nunca un catalogo espejo escrito a mano
   (meta ADR 0007).
-- **Perfil infantil: falla cerrado.** Si no se puede determinar el perfil, se
-  aplica el infantil. Como se aplica es provisional: su destino es conscience
-  (meta ADR 0013).
+- **Sin perfil determinado: `restricted`, falla cerrado.** Como se aplica es
+  provisional: su destino es conscience (meta ADR 0019, edge ADR 0004).
 - **Sin pantallas.** Lo que se ve es de `ia_nest_web`. Sustituir el webchat no
   debe editar ningun fichero de este repo (meta ADR 0013).
 - **Credenciales fuera del repo.** Se versiona solo el `.example`.

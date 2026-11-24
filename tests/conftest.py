@@ -23,7 +23,7 @@ def config_dict(tmp_path: Path):
     password_file = tmp_path / "directory-password"
     ca_file.touch(exist_ok=True)
     password_file.write_text("bind-password\n", encoding="ascii")
-    child_menu = [
+    restricted_menu = [
         {
             "id": "child_direct",
             "mode": "directo",
@@ -67,13 +67,14 @@ def config_dict(tmp_path: Path):
                 "headers": {
                     "chat": "X-Chat",
                     "person": "X-Person",
+                    "device": "X-Device",
                     "background_task": "X-Task",
                 },
-                "menus": {"adult": adult_menu, "child": child_menu},
+                "menus": {"adult": adult_menu, "restricted": restricted_menu},
             },
             "api": {
                 "headers": {},
-                "menus": {"adult": adult_menu, "child": child_menu},
+                "menus": {"adult": adult_menu, "restricted": restricted_menu},
             },
         },
         "api": {
